@@ -1,7 +1,7 @@
 // app/role-select.tsx — Choose Passenger or Driver
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View, Pressable, Platform } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import RippleButton from '../components/RippleButton';
@@ -13,13 +13,11 @@ const BG = '#EAF1FB';
 function Logo() {
   return (
     <View style={s.logoCard}>
-      <Text>
-        <Text style={{ color: '#1A4FA0', fontSize: 34, fontWeight: '900' }}>Anti</Text>
-        <Text style={{ color: '#22AA44', fontSize: 34, fontWeight: '900' }}>gravity</Text>
-      </Text>
-      <Text style={s.tagline}>
-        SMART & GREEN RIDE-SHARING
-      </Text>
+      <Image
+        source={require('../assets/images/devicegns-logo.jpg')}
+        style={s.logoImage}
+        resizeMode="contain"
+      />
     </View>
   );
 }
@@ -85,7 +83,7 @@ const s = StyleSheet.create({
   hero: { backgroundColor: BLUE, paddingTop: 16, paddingBottom: 28, paddingHorizontal: 20, alignItems: 'center' },
   back: { position: 'absolute', top: 16, left: 20, zIndex: 10, padding: 6 },
   logoCard: { backgroundColor: '#FFF', borderRadius: 8, paddingHorizontal: 28, paddingVertical: 14, alignItems: 'center', marginTop: 8, elevation: 6 },
-  tagline: { fontSize: 10, fontWeight: '700', color: '#222', letterSpacing: 1.2, marginTop: 2 },
+  logoImage: { width: 180, height: 70 },
   sheet: { flex: 1, backgroundColor: BG, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' },
   scroll: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 40 },
   roleCard: { backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden', elevation: 3 },

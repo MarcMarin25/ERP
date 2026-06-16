@@ -6,196 +6,154 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
-  Modal,
+  Image,
+  ImageBackground,
   TextInput,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { usePassengerData, PinnedLocation } from '../_layout';
+import { Ionicons } from '@expo/vector-icons';
+import { usePassengerData } from '../_layout';
 
 export default function PinnedScreen() {
-  const { pinnedLocations, setPinnedLocations } = usePassengerData();
-  
-  // Modal states
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editingItem, setEditingItem] = useState<PinnedLocation | null>(null);
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
+  const { trips, setTrips } = usePassengerData();
+  const [searchText, setSearchText] = useState('');
 
-  const handleOpenAdd = () => {
-    setEditingItem(null);
-    setName('');
-    setAddress('');
-    setModalVisible(true);
+  const toggleFavorite = (tripId: string) => {
+    setTrips(prev => prev.map(t => {
+      if (t.id === tripId) {
+        const isFav = !t.isFavorite;
+        return { ...t, isFavorite: isFav };
+      }
+      return t;
+    }));
   };
 
-  const handleOpenEdit = (item: PinnedLocation) => {
-    setEditingItem(item);
-    setName(item.name);
-    setAddress(item.address);
-    setModalVisible(true);
-  };
-
-  const handleDelete = (id: string) => {
-    setPinnedLocations(prev => prev.filter(item => item.id !== id));
-  };
-
-  const handleSave = () => {
-    if (!name.trim() || !address.trim()) {
-      alert('Please fill out all fields.');
-      return;
-    }
-
-    if (editingItem) {
-      // Edit mode
-      setPinnedLocations(prev =>
-        prev.map(item =>
-          item.id === editingItem.id ? { ...item, name, address } : item
-        )
-      );
-    } else {
-      // Add mode
-      const newItem = {
-        id: String(Date.now()),
-        name,
-        address,
-      };
-      setPinnedLocations(prev => [...prev, newItem]);
-    }
-    setModalVisible(false);
-  };
-
-  // Icon selector based on name
-  const getIcon = (label: string) => {
-    const l = label.toLowerCase();
-    if (l.includes('home')) return 'home';
-    if (l.includes('work') || l.includes('office')) return 'briefcase';
-    if (l.includes('school') || l.includes('university') || l.includes('college')) return 'school';
-    return 'bookmark';
-  };
+  // Filter trips by favorite status and search text
+  const favoriteTrips = trips.filter(trip => {
+    const isFav = !!trip.isFavorite;
+    const matchesSearch = searchText
+      ? trip.date.toLowerCase().includes(searchText.toLowerCase()) ||
+        trip.pickup.toLowerCase().includes(searchText.toLowerCase()) ||
+        trip.destination.toLowerCase().includes(searchText.toLowerCase())
+      : true;
+    return isFav && matchesSearch;
+  });
 
   return (
     <SafeAreaView style={s.container} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor="#1A4FA0" />
-      
-      {/* Header */}
-      <View style={s.header}>
-        <View style={s.headerTextContainer}>
-          <Text style={s.headerTitle}>Favorite Locations</Text>
-          <Text style={s.headerSubtitle}>Quick access to your pinned destinations</Text>
-        </View>
-        <TouchableOpacity
-          style={s.addButton}
-          activeOpacity={0.8}
-          onPress={handleOpenAdd}
-        >
-          <Ionicons name="add" size={24} color="#1A4FA0" />
-        </TouchableOpacity>
-      </View>
+      <StatusBar barStyle="dark-content" backgroundColor="#EAF1FB" />
 
-      {/* Main address list */}
-      <ScrollView contentContainerStyle={s.scrollContainer} showsVerticalScrollIndicator={false}>
-        {pinnedLocations.length === 0 ? (
-          <View style={s.emptyContainer}>
-            <MaterialCommunityIcons name="map-marker-off" size={60} color="#B2CBEB" />
-            <Text style={s.emptyText}>No pinned locations found.</Text>
-            <TouchableOpacity style={s.emptyButton} onPress={handleOpenAdd}>
-              <Text style={s.emptyButtonText}>Add Your First Location</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          pinnedLocations.map(item => (
-            <View key={item.id} style={s.pinnedCard}>
-              <View style={s.cardLeft}>
-                <View style={s.iconBg}>
-                  <Ionicons name={getIcon(item.name)} size={20} color="#1A4FA0" />
-                </View>
-                <View style={s.addressDetails}>
-                  <Text style={s.locationName}>{item.name}</Text>
-                  <Text style={s.locationAddress} numberOfLines={2}>{item.address}</Text>
-                </View>
-              </View>
-
-              {/* Edit/Delete Actions */}
-              <View style={s.actionsContainer}>
-                <TouchableOpacity
-                  style={s.actionButton}
-                  onPress={() => handleOpenEdit(item)}
-                >
-                  <Ionicons name="create-outline" size={20} color="#1A4FA0" />
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[s.actionButton, { borderColor: '#FCA5A5' }]}
-                  onPress={() => handleDelete(item.id)}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#D02A30" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))
-        )}
-      </ScrollView>
-
-      {/* ── Add/Edit Modal ── */}
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
+      {/* ── DeviceGNS Logo Header ── */}
+      <ImageBackground 
+        source={require('../../assets/images/BLUE NAV TOP.png')} 
+        style={s.logoHeader}
+        resizeMode="cover"
       >
-        <View style={s.modalOverlay}>
-          <View style={s.modalBox}>
-            <Text style={s.modalTitle}>
-              {editingItem ? 'Edit Favorite Location' : 'Add New Location'}
-            </Text>
+        <View style={s.logoCard}>
+          <Image 
+            source={require('../../assets/images/devicegns-logo.jpg')} 
+            style={s.logoImage} 
+            resizeMode="contain"
+          />
+        </View>
+      </ImageBackground>
 
-            <Text style={s.label}>Label (e.g. Home, Work, Gym)</Text>
-            <View style={s.inputRow}>
-              <View style={s.iconBox}><Ionicons name="bookmark-outline" size={16} color="#FFF" /></View>
-              <TextInput
-                style={s.input}
-                placeholder="Location Label"
-                value={name}
-                onChangeText={setName}
-                placeholderTextColor="#A0A0A0"
-              />
-            </View>
+      {/* ── Trip Summary Content Sheet ── */}
+      <View style={s.sheet}>
+        
+        {/* Header Row: Title & Filter */}
+        <View style={s.sheetHeaderRow}>
+          <Text style={s.sheetTitle}>Trip Summary</Text>
+          <TouchableOpacity style={s.filterButton} activeOpacity={0.7}>
+            <Text style={s.filterButtonText}>Filter: By Date</Text>
+          </TouchableOpacity>
+        </View>
 
-            <Text style={s.label}>Full Address</Text>
-            <View style={[s.inputRow, s.addressInputRow]}>
-              <View style={[s.iconBox, { height: '100%', paddingTop: 14 }]}><Ionicons name="location-outline" size={16} color="#FFF" /></View>
-              <TextInput
-                style={[s.input, { height: 80, textAlignVertical: 'top', paddingTop: 10 }]}
-                placeholder="Street Address, City, Region"
-                value={address}
-                onChangeText={setAddress}
-                placeholderTextColor="#A0A0A0"
-                multiline
-                numberOfLines={3}
-              />
-            </View>
+        {/* Sub-Header: Favorites Label */}
+        <View style={s.subHeaderTabs}>
+          <Text style={s.favoritesLabel}>Favorites</Text>
+        </View>
 
-            {/* Modal Buttons */}
-            <View style={s.modalButtonsRow}>
-              <TouchableOpacity
-                style={[s.modalBtn, s.cancelBtn]}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={s.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[s.modalBtn, s.saveBtn]}
-                onPress={handleSave}
-              >
-                <Text style={s.saveBtnText}>Save</Text>
-              </TouchableOpacity>
-            </View>
+        {/* Date / YYYY/MM/DD Search Input */}
+        <View style={s.searchBarContainer}>
+          <TextInput
+            style={s.searchInput}
+            placeholder="YYYY/MM/DD"
+            placeholderTextColor="#889BB5"
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+          <View style={s.searchActions}>
+            <Ionicons name="calendar-outline" size={18} color="#1A4FA0" style={s.searchIcon} />
+            <View style={s.searchDivider} />
+            <Ionicons name="search" size={18} color="#1A4FA0" style={s.searchIcon} />
           </View>
         </View>
-      </Modal>
+
+        {/* Scrollable list of favorite trips */}
+        <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+          {favoriteTrips.map(trip => (
+            <View key={trip.id} style={s.tripCard}>
+              {/* Driver Info & Date */}
+              <View style={s.tripHeader}>
+                <Text style={s.driverText}>Driven by: {trip.driverName || 'Mico'}</Text>
+                <Text style={s.dateText}>Past trip • {trip.date} • {trip.time}</Text>
+              </View>
+
+              {/* Route bubbles */}
+              <View style={s.routeContainer}>
+                {/* Pickup */}
+                <View style={s.routeRow}>
+                  <Ionicons name="location" size={18} color="#D02A30" style={s.pinIcon} />
+                  <View style={[s.locationBubble, s.pickupBubble]}>
+                    <Text style={s.pickupText} numberOfLines={1}>{trip.pickup}</Text>
+                  </View>
+                </View>
+
+                {/* Destination */}
+                <View style={s.routeRow}>
+                  <Ionicons name="location" size={18} color="#22B04B" style={s.pinIcon} />
+                  <View style={[s.locationBubble, s.destinationBubble]}>
+                    <Text style={s.destinationText} numberOfLines={1}>{trip.destination}</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Distance and Duration Info */}
+              <View style={s.tripMetrics}>
+                <Text style={s.metricText}>Distance: {trip.distance || '166.63 km'}</Text>
+                <Text style={s.metricText}>Time Duration : {trip.duration || '6 mins'}</Text>
+              </View>
+
+              {/* Fare */}
+              <View style={s.fareRow}>
+                <Text style={s.fareLabel}>Fare</Text>
+                <Text style={s.fareValue}>₱ {trip.price.toFixed(2)}</Text>
+              </View>
+
+              {/* Side-by-side action buttons */}
+              <View style={s.actionsRow}>
+                <TouchableOpacity style={s.actionBtn} activeOpacity={0.8}>
+                  <Text style={s.actionBtnText}>View Details</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[s.actionBtn, s.actionBtnActive]} 
+                  activeOpacity={0.8}
+                  onPress={() => toggleFavorite(trip.id)}
+                >
+                  <Text style={s.actionBtnText}>Remove Favorite</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Book Again button */}
+              <TouchableOpacity style={s.bookAgainBtn} activeOpacity={0.85}>
+                <Text style={s.bookAgainBtnText}>Book Again</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -205,227 +163,240 @@ const s = StyleSheet.create({
     flex: 1,
     backgroundColor: '#EAF1FB',
   },
-  header: {
-    backgroundColor: '#1A4FA0',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  logoHeader: {
+    width: '100%',
+    paddingTop: 45,
+    paddingBottom: 30,
     alignItems: 'center',
-    elevation: 4,
-  },
-  headerTextContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#FFF',
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#D0E1F9',
-    marginTop: 4,
-  },
-  addButton: {
-    backgroundColor: '#FFF',
-    width: 44,
-    height: 44,
-    borderRadius: 12,
     justifyContent: 'center',
+  },
+  logoCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     alignItems: 'center',
+    justifyContent: 'center',
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowRadius: 4,
+    width: '48%',
+    height: 60,
   },
-  scrollContainer: {
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  sheet: {
+    flex: 1,
+    backgroundColor: '#EDF5FD', // Soft blue background color matching Screenshot 4
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#EAF1FB',
+    borderBottomWidth: 0,
+    marginTop: -18,
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 100,
   },
-  emptyContainer: {
+  sheetHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 80,
+    paddingTop: 24,
   },
-  emptyText: {
-    fontSize: 15,
-    color: '#666',
+  sheetTitle: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#104595',
+  },
+  filterButton: {
+    borderColor: '#104595',
+    borderWidth: 1.5,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: '#FFF',
+  },
+  filterButtonText: {
+    color: '#104595',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  subHeaderTabs: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 14,
-    textAlign: 'center',
   },
-  emptyButton: {
-    backgroundColor: '#1A4FA0',
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    marginTop: 20,
-  },
-  emptyButtonText: {
-    color: '#FFF',
+  favoritesLabel: {
+    fontSize: 16,
     fontWeight: '700',
-    fontSize: 14,
+    color: '#104595',
   },
-  pinnedCard: {
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#A4C3E8',
+    borderRadius: 8,
+    height: 40,
+    backgroundColor: '#FFF',
+    paddingLeft: 12,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: '100%',
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  searchActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: '100%',
+    paddingRight: 10,
+  },
+  searchDivider: {
+    width: 1.5,
+    height: 20,
+    backgroundColor: '#A4C3E8',
+    marginHorizontal: 8,
+  },
+  searchIcon: {
+    paddingHorizontal: 2,
+  },
+  scroll: {
+    paddingBottom: 110,
+    paddingTop: 10,
+  },
+  tripCard: {
     backgroundColor: '#FFF',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1.5,
     borderColor: '#EAF1FB',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 5,
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
   },
-  cardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 10,
-  },
-  iconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#EAF1FB',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  addressDetails: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  locationName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1A4FA0',
-  },
-  locationAddress: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-    lineHeight: 18,
-  },
-  actionsContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#A2C2E7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFF',
-  },
-
-  // Modal styling
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalBox: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 24,
-    width: '100%',
-    elevation: 10,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 5 },
-        shadowOpacity: 0.15,
-        shadowRadius: 10,
-      }
-    })
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1A4FA0',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  label: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '600',
-    marginBottom: 6,
-    marginTop: 12,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#A2C2E7',
-    borderRadius: 10,
-    height: 48,
-    overflow: 'hidden',
-    backgroundColor: '#FFF',
-  },
-  addressInputRow: {
-    height: 80,
-    alignItems: 'flex-start',
-  },
-  iconBox: {
-    width: 44,
-    height: '100%',
-    backgroundColor: '#1A4FA0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  input: {
-    flex: 1,
-    height: '100%',
-    paddingHorizontal: 12,
-    fontSize: 15,
-    color: '#333',
-  },
-  modalButtonsRow: {
+  tripHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 28,
+    alignItems: 'center',
+    marginBottom: 10,
   },
-  modalBtn: {
+  driverText: {
+    fontSize: 13,
+    color: '#104595',
+    fontWeight: '700',
+  },
+  dateText: {
+    fontSize: 12,
+    color: '#104595',
+    fontWeight: '500',
+  },
+  routeContainer: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  routeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pinIcon: {
+    width: 18,
+    alignItems: 'center',
+  },
+  locationBubble: {
     flex: 1,
-    height: 48,
-    borderRadius: 10,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: '#C6D9F2',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    backgroundColor: '#F7FAFC',
+  },
+  pickupBubble: {},
+  destinationBubble: {},
+  pickupText: {
+    fontSize: 12,
+    color: '#B63A3A',
+    fontWeight: '500',
+  },
+  destinationText: {
+    fontSize: 12,
+    color: '#22B04B',
+    fontWeight: '500',
+  },
+  tripMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  metricText: {
+    fontSize: 12.5,
+    color: '#104595',
+    fontWeight: '600',
+  },
+  fareRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#F0F5FC',
+    paddingTop: 10,
+    marginBottom: 12,
+  },
+  fareLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#B63A3A',
+  },
+  fareValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#B63A3A',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 10,
+  },
+  actionBtn: {
+    flex: 1,
+    height: 38,
+    backgroundColor: '#5A94FF',
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cancelBtn: {
-    borderWidth: 1.5,
-    borderColor: '#D02A30',
-    backgroundColor: '#FFF',
-  },
-  cancelBtnText: {
-    color: '#D02A30',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  saveBtn: {
-    backgroundColor: '#22B04B',
-  },
-  saveBtnText: {
+  actionBtnText: {
     color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  actionBtnActive: {
+    backgroundColor: '#E25B5B',
+  },
+  bookAgainBtn: {
+    height: 42,
+    backgroundColor: '#004DAA',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bookAgainBtnText: {
+    color: '#FFF',
+    fontSize: 15,
     fontWeight: 'bold',
-    fontSize: 16,
-  }
+  },
 });

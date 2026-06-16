@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { UserSession, getCurrentSession, setCurrentSession, clearCurrentSession } from '../utils/mockDb';
+import { UserSession, getCurrentSession, setCurrentSession, clearCurrentSession, updateProfileInDb } from '../utils/mockDb';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { FontAwesome, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -20,6 +20,10 @@ export interface Trip {
   destination: string;
   price: number;
   status: 'Completed' | 'Cancelled';
+  driverName?: string;
+  distance?: string;
+  duration?: string;
+  isFavorite?: boolean;
 }
 
 export interface PinnedLocation {
@@ -30,14 +34,14 @@ export interface PinnedLocation {
 
 export interface ProfileData {
   username: string;
-  fullName: string;
+  name: string;
   gender: string;
-  dob: string;
+  birth_date: string;
   age: string;
-  mobile: string;
+  phone: string;
   email: string;
   address: string;
-  createdAt: string;
+  created_at: string;
 }
 
 interface PassengerDataContextType {
@@ -99,14 +103,14 @@ export default function RootLayout() {
 
   const [profile, setProfile] = useState<ProfileData>({
     username: "Marc Marin",
-    fullName: "Marc Francis P. Marin",
+    name: "Marc Francis P. Marin",
     gender: "Male",
-    dob: "2003-09-25",
+    birth_date: "2003-09-25",
     age: "22",
-    mobile: "09613354271",
+    phone: "09613354271",
     email: "marcmarin9800@gmail.com",
     address: "Region III, Pampanga, Candaba",
-    createdAt: "",
+    created_at: "",
   });
 
   // Load session from AsyncStorage on mount
@@ -119,14 +123,14 @@ export default function RootLayout() {
           if (session.role === 'passenger') {
             setProfile({
               username: session.username,
-              fullName: session.fullName,
+              name: session.name,
               gender: session.gender || 'Male',
-              dob: session.dob,
+              birth_date: session.birth_date,
               age: session.age,
-              mobile: session.mobile,
+              phone: session.phone,
               email: session.email,
               address: session.address,
-              createdAt: session.createdAt || '',
+              created_at: session.created_at || '',
             });
           }
         }
@@ -145,14 +149,14 @@ export default function RootLayout() {
     if (session.role === 'passenger') {
       setProfile({
         username: session.username,
-        fullName: session.fullName,
+        name: session.name,
         gender: session.gender || 'Male',
-        dob: session.dob,
+        birth_date: session.birth_date,
         age: session.age,
-        mobile: session.mobile,
+        phone: session.phone,
         email: session.email,
         address: session.address,
-        createdAt: session.createdAt || '',
+        created_at: session.created_at || '',
       });
     }
   };
@@ -165,19 +169,20 @@ export default function RootLayout() {
   const updateSessionProfile = async (updatedFields: Partial<UserSession>) => {
     if (userSession) {
       const newSession = { ...userSession, ...updatedFields };
+      await updateProfileInDb(newSession);
       await setCurrentSession(newSession);
       setUserSession(newSession);
       if (newSession.role === 'passenger') {
         setProfile({
           username: newSession.username,
-          fullName: newSession.fullName,
+          name: newSession.name,
           gender: newSession.gender || 'Male',
-          dob: newSession.dob,
+          birth_date: newSession.birth_date,
           age: newSession.age,
-          mobile: newSession.mobile,
+          phone: newSession.phone,
           email: newSession.email,
           address: newSession.address,
-          createdAt: newSession.createdAt || '',
+          created_at: newSession.created_at || '',
         });
       }
     }
@@ -186,30 +191,27 @@ export default function RootLayout() {
   const [trips, setTrips] = useState<Trip[]>([
     {
       id: '1',
-      date: 'May 28, 2026',
-      time: '09:30 AM',
-      pickup: 'Holy Angel University, Angeles City',
-      destination: 'Candaba, Pampanga',
-      price: 320.00,
-      status: 'Completed'
+      date: 'Jun 03',
+      time: '4:30 PM',
+      pickup: 'Yukon Street, Riverside Subdivision, Angeles, Central Luzon, 2009',
+      destination: 'Shuntog Street, Rizal Monument, District 18, Central Business Distric...',
+      price: 2604.01,
+      status: 'Cancelled',
+      driverName: 'Mico',
+      distance: '166.63 km',
+      duration: '6 mins'
     },
     {
       id: '2',
-      date: 'May 26, 2026',
-      time: '02:15 PM',
-      pickup: 'Candaba, Pampanga',
-      destination: 'SM City Pampanga, San Fernando',
-      price: 240.00,
-      status: 'Completed'
-    },
-    {
-      id: '3',
-      date: 'May 25, 2026',
-      time: '11:00 AM',
-      pickup: 'Clark Airport, Angeles City',
-      destination: 'Candaba, Pampanga',
-      price: 450.00,
-      status: 'Cancelled'
+      date: 'May 26',
+      time: '9:46 AM',
+      pickup: 'Calibutbut, Angeles, Central Luzon, 2001',
+      destination: 'Ganza Parking, Otek Street, Purok 8, Abanao - Za... Chugum - Ka...',
+      price: 1721.43,
+      status: 'Cancelled',
+      driverName: 'Mico',
+      distance: '110.15 km',
+      duration: '4 mins'
     }
   ]);
 

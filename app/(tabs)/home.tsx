@@ -1,7 +1,6 @@
 /**
- * Web fallback for the Home / Map screen.
- * react-native-maps is a native-only package, so this file is
- * used by Metro on web while home.native.tsx is used on iOS/Android.
+ * Fully functional passenger Home / Map screen.
+ * Integrates real-time Google Maps search, autocomplete, and routing.
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -11,14 +10,16 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
-  Image,
   ActivityIndicator,
   Pressable,
   Platform,
+  ScrollView,
 } from 'react-native';
 import RippleButton from '../../components/RippleButton';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { usePassengerData } from '../_layout';
+import GoogleMap from '../../components/GoogleMap';
+import { getSuggestions, geocode, getDirections, PlaceSuggestion } from '../../utils/googleMapsService';
 
 export default function HomeScreen() {
   const { setTrips } = usePassengerData();
@@ -34,29 +35,107 @@ export default function HomeScreen() {
   const [isBooking, setIsBooking] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
 
+  // Google Maps state variables
+  const [pickupCoords, setPickupCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [destinationCoords, setDestinationCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [activeField, setActiveField] = useState<'pickup' | 'destination' | null>(null);
+
+  // Geocode default pickup location on mount
   useEffect(() => {
-    if (!destination.trim()) {
+    const geocodeDefaultPickup = async () => {
+      const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBFHqGzZOVs7b0cCdWuePt0t4kbsPiJ7Kc";
+      const coords = await geocode('Candaba, Pampanga', apiKey);
+      if (coords) {
+        setPickupCoords(coords);
+      }
+    };
+    geocodeDefaultPickup();
+  }, []);
+
+  // Fetch Place Autocomplete suggestions when user types
+  useEffect(() => {
+    if (!activeField) {
+      setSuggestions([]);
+      return;
+    }
+
+    const query = activeField === 'pickup' ? pickup : destination;
+    if (!query || query.trim().length < 3) {
+      setSuggestions([]);
+      return;
+    }
+
+    const delayDebounceFn = setTimeout(async () => {
+      const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBFHqGzZOVs7b0cCdWuePt0t4kbsPiJ7Kc";
+      const results = await getSuggestions(query, apiKey);
+      setSuggestions(results);
+    }, 400);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [pickup, destination, activeField]);
+
+  // Fetch routes and calculate distance, duration, and fare when pickup/destination change
+  useEffect(() => {
+    if (!pickupCoords || !destinationCoords) {
+      setRouteCoords([]);
       setDistance(0);
       setDuration(0);
       setFare(0);
       return;
     }
 
-    setIsCalculating(true);
-    const timer = setTimeout(() => {
-      const length = destination.trim().length;
-      const computedDistance = Math.min(25, Math.max(1.8, (length * 0.6) + 1.2));
-      const computedDuration = Math.round(computedDistance * 2.2 + 3);
-      const computedFare = Math.round(40 + (computedDistance * 15));
+    const fetchRoute = async () => {
+      setIsCalculating(true);
+      const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBFHqGzZOVs7b0cCdWuePt0t4kbsPiJ7Kc";
+      const routeInfo = await getDirections(pickupCoords, destinationCoords, apiKey);
 
-      setDistance(parseFloat(computedDistance.toFixed(1)));
-      setDuration(computedDuration);
-      setFare(computedFare);
+      if (routeInfo) {
+        setRouteCoords(routeInfo.polylinePoints);
+        setDistance(parseFloat(routeInfo.distanceKm.toFixed(1)));
+        setDuration(routeInfo.durationMin);
+        setFare(Math.round(40 + (routeInfo.distanceKm * 15)));
+      } else {
+        // Fallback to length-based mock calculations if api fails
+        const length = destination.trim().length;
+        const computedDistance = Math.min(25, Math.max(1.8, (length * 0.6) + 1.2));
+        const computedDuration = Math.round(computedDistance * 2.2 + 3);
+        const computedFare = Math.round(40 + (computedDistance * 15));
+
+        setDistance(parseFloat(computedDistance.toFixed(1)));
+        setDuration(computedDuration);
+        setFare(computedFare);
+      }
       setIsCalculating(false);
-    }, 500);
+    };
 
-    return () => clearTimeout(timer);
-  }, [destination]);
+    fetchRoute();
+  }, [pickupCoords, destinationCoords, destination]);
+
+  const handleSelectSuggestion = async (item: PlaceSuggestion, field: 'pickup' | 'destination') => {
+    setIsCalculating(true);
+    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBFHqGzZOVs7b0cCdWuePt0t4kbsPiJ7Kc";
+    
+    if (field === 'pickup') {
+      setPickup(item.description);
+      setSuggestions([]);
+      setActiveField(null);
+      const coords = await geocode(item.description, apiKey);
+      if (coords) {
+        setPickupCoords(coords);
+      }
+    } else {
+      setDestination(item.description);
+      setSuggestions([]);
+      setActiveField(null);
+      const coords = await geocode(item.description, apiKey);
+      if (coords) {
+        setDestinationCoords(coords);
+      }
+    }
+    setIsCalculating(false);
+  };
 
   const handleBookRide = () => {
     if (!destination.trim()) {
@@ -86,26 +165,22 @@ export default function HomeScreen() {
         setBookingSuccess(false);
         setShowPopup(false);
         setDestination('');
+        setDestinationCoords(null);
+        setRouteCoords([]);
       }, 2500);
     }, 2000);
   };
 
   return (
     <View style={s.container}>
-      {/* ── Web Map Fallback ── */}
+      {/* ── Google Map ── */}
       <View style={s.webMapContainer}>
-        <Image
-          source={require('../../assets/images/map_background.png')}
-          style={s.webMapImage}
-          resizeMode="cover"
+        <GoogleMap
+          pickup={pickupCoords}
+          destination={destinationCoords}
+          route={routeCoords}
+          interactive={true}
         />
-        {/* Custom floating marker */}
-        <View style={s.webPinPosition}>
-          <View style={s.pulseWave} />
-          <View style={s.pinOuterCircle}>
-            <View style={s.pinInnerCircle} />
-          </View>
-        </View>
       </View>
 
       {/* ── Floating Start Action Button ── */}
@@ -159,10 +234,26 @@ export default function HomeScreen() {
                   placeholder="Pick up location"
                   value={pickup}
                   onChangeText={setPickup}
+                  onFocus={() => setActiveField('pickup')}
                   placeholderTextColor="#999"
                   editable={!isBooking && !bookingSuccess}
                 />
               </View>
+
+              {activeField === 'pickup' && suggestions.length > 0 && (
+                <ScrollView style={s.suggestionsList} keyboardShouldPersistTaps="handled">
+                  {suggestions.map((item, index) => (
+                    <TouchableOpacity
+                      key={item.placeId || index}
+                      style={s.suggestionItem}
+                      onPress={() => handleSelectSuggestion(item, 'pickup')}
+                    >
+                      <Ionicons name="location-outline" size={18} color="#1A4FA0" style={{ marginRight: 8 }} />
+                      <Text style={s.suggestionText} numberOfLines={1}>{item.description}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
 
               <View style={s.connectorDots}>
                 <View style={s.dot} />
@@ -179,11 +270,27 @@ export default function HomeScreen() {
                   placeholder="Enter destination location"
                   value={destination}
                   onChangeText={setDestination}
+                  onFocus={() => setActiveField('destination')}
                   placeholderTextColor="#999"
                   autoFocus
                   editable={!isBooking && !bookingSuccess}
                 />
               </View>
+
+              {activeField === 'destination' && suggestions.length > 0 && (
+                <ScrollView style={s.suggestionsList} keyboardShouldPersistTaps="handled">
+                  {suggestions.map((item, index) => (
+                    <TouchableOpacity
+                      key={item.placeId || index}
+                      style={s.suggestionItem}
+                      onPress={() => handleSelectSuggestion(item, 'destination')}
+                    >
+                      <Ionicons name="location-outline" size={18} color="#1A4FA0" style={{ marginRight: 8 }} />
+                      <Text style={s.suggestionText} numberOfLines={1}>{item.description}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
             </View>
 
             {destination.trim().length > 0 && (
@@ -512,5 +619,27 @@ const s = StyleSheet.create({
   receiptText: {
     fontSize: 14,
     color: '#333',
+  },
+  suggestionsList: {
+    maxHeight: 150,
+    backgroundColor: '#FFF',
+    borderColor: '#E2E8F0',
+    borderWidth: 1.5,
+    borderRadius: 10,
+    marginTop: 4,
+    marginBottom: 8,
+    zIndex: 99,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EAF1FB',
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
   },
 });

@@ -4,7 +4,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-  Modal, Platform, ScrollView,
+  Image, Modal, Platform, ScrollView,
   StyleSheet, Text, TextInput, View, Pressable, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -139,13 +139,11 @@ function getBarangaysForCity(cityName: string): string[] {
 function Logo() {
   return (
     <View style={s.logoCard}>
-      <Text>
-        <Text style={{ color: '#1A4FA0', fontSize: 32, fontWeight: '900' }}>Anti</Text>
-        <Text style={{ color: '#22AA44', fontSize: 32, fontWeight: '900' }}>gravity</Text>
-      </Text>
-      <Text style={s.tagline}>
-        SMART & GREEN RIDE-SHARING
-      </Text>
+      <Image
+        source={require('../assets/images/devicegns-logo.jpg')}
+        style={s.logoImage}
+        resizeMode="contain"
+      />
     </View>
   );
 }
@@ -321,7 +319,7 @@ export default function PassengerAuthScreen() {
   const isLogin = mode === 'login';
 
   // Login state
-  const [loginMobile, setLoginMobile] = useState('');
+  const [loginPhone, setLoginPhone]   = useState('');
   const [loginPw, setLoginPw]         = useState('');
   const [showPw, setShowPw]           = useState(true);
 
@@ -336,7 +334,7 @@ export default function PassengerAuthScreen() {
   const [agreedPromos, setAgreedPromos]     = useState(false);
 
   const [form, setForm] = useState({
-    username:'', fullName:'', gender:'Male', mobile:'', email:'',
+    username:'', name:'', gender:'Male', phone:'', email:'',
     region:'', province:'', city:'', barangay:'', password:'', confirmPassword:'',
   });
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
@@ -349,8 +347,8 @@ export default function PassengerAuthScreen() {
     return emailRegex.test(e.trim());
   };
 
-  const isMobileValid = (m: string) => {
-    const cleaned = m.replace(/\D/g, '');
+  const isPhoneValid = (p: string) => {
+    const cleaned = p.replace(/\D/g, '');
     return cleaned.length >= 10;
   };
 
@@ -358,7 +356,7 @@ export default function PassengerAuthScreen() {
     form.username.trim().length > 0 &&
     dobDate !== null &&
     calcAge(dobDate) >= 18 &&
-    isMobileValid(form.mobile) &&
+    isPhoneValid(form.phone) &&
     isEmailValid(form.email) &&
     form.region.trim().length > 0 &&
     form.province.trim().length > 0 &&
@@ -371,13 +369,13 @@ export default function PassengerAuthScreen() {
     agreedTerms;
 
   const isLoginValid =
-    isMobileValid(loginMobile) &&
+    isPhoneValid(loginPhone) &&
     loginPw.length > 0;
 
   const handleLoginSubmit = async () => {
     if (!isLoginValid) return;
     try {
-      const passenger = await loginPassenger(loginMobile, loginPw);
+      const passenger = await loginPassenger(loginPhone, loginPw);
       await login({
         role: 'passenger',
         ...passenger
@@ -394,11 +392,11 @@ export default function PassengerAuthScreen() {
       const fullAddress = `${form.barangay}, ${form.city}, ${form.province}, ${form.region}`;
       const passengerData = {
         username: form.username.trim(),
-        fullName: form.fullName.trim() || form.username.trim(),
+        name: form.name.trim() || form.username.trim(),
         gender: form.gender,
-        dob: dobDate ? dobDate.toISOString().split('T')[0] : '',
+        birth_date: dobDate ? dobDate.toISOString().split('T')[0] : '',
         age: age,
-        mobile: form.mobile.trim(),
+        phone: form.phone.trim(),
         email: form.email.trim(),
         region: form.region,
         province: form.province,
@@ -406,7 +404,7 @@ export default function PassengerAuthScreen() {
         barangay: form.barangay,
         address: fullAddress,
         password: form.password,
-        createdAt: '', // Will be set by registerPassenger()
+        created_at: '', // Will be set by registerPassenger()
       };
 
       await registerPassenger(passengerData);
@@ -414,7 +412,7 @@ export default function PassengerAuthScreen() {
         role: 'passenger',
         ...passengerData
       });
-      alert('Registration successful! Welcome to Antigravity.');
+      alert('Registration successful! Welcome to DeviceGNS.');
       router.replace('/(tabs)/home');
     } catch (err: any) {
       alert(err.message || 'Registration failed.');
@@ -445,9 +443,9 @@ export default function PassengerAuthScreen() {
           {isLogin ? (
             <View>
               <Text style={s.loginTitle}>Sign in to your Account</Text>
-              <Text style={s.loginSub}>Enter your mobile and password to log in</Text>
-              <Field label="Mobile Number">
-                <IconInput icon="phone" placeholder="Mobile Number" value={loginMobile} onChange={setLoginMobile} keyboard="phone-pad" />
+              <Text style={s.loginSub}>Enter your phone number and password to log in</Text>
+              <Field label="Phone Number">
+                <IconInput icon="phone" placeholder="Phone Number" value={loginPhone} onChange={setLoginPhone} keyboard="phone-pad" />
               </Field>
               <Field label="Password">
                 <IconInput icon="key" placeholder="Password" value={loginPw} onChange={setLoginPw} secure={showPw} onToggleSecure={() => setShowPw(p => !p)} />
@@ -475,7 +473,7 @@ export default function PassengerAuthScreen() {
                     <IconInput icon="user" placeholder="Username" value={form.username} onChange={(v: string) => set('username', v)} />
                   </Field>
                   <Field label="Full Name (Optional)">
-                    <IconInput icon="user" placeholder="Full Name" value={form.fullName} onChange={(v: string) => set('fullName', v)} />
+                    <IconInput icon="user" placeholder="Full Name" value={form.name} onChange={(v: string) => set('name', v)} />
                   </Field>
 
                   <Field label="Gender">
@@ -489,8 +487,8 @@ export default function PassengerAuthScreen() {
                   {/* DOB + Age with working calendar */}
                   <DobField value={dobDate} age={age} onChange={setDobDate} />
 
-                  <Field label="Mobile Number">
-                    <IconInput icon="phone" placeholder="Mobile Number" value={form.mobile} onChange={(v: string) => set('mobile', v)} keyboard="phone-pad" />
+                  <Field label="Phone Number">
+                    <IconInput icon="phone" placeholder="Phone Number" value={form.phone} onChange={(v: string) => set('phone', v)} keyboard="phone-pad" />
                   </Field>
                   <Field label="Email Address">
                     <IconInput icon="envelope" placeholder="Email Address" value={form.email} onChange={(v: string) => set('email', v)} keyboard="email-address" />
@@ -632,7 +630,7 @@ const s = StyleSheet.create({
   hero:      { backgroundColor: BLUE, paddingTop: 12, paddingBottom: 24, alignItems: 'center' },
   back:      { position: 'absolute', top: 16, left: 20, zIndex: 10, padding: 6 },
   logoCard:  { backgroundColor: '#FFF', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 12, alignItems: 'center', marginTop: 8, elevation: 5 },
-  tagline:   { fontSize: 9, fontWeight: '700', color: '#222', letterSpacing: 1.2, marginTop: 2 },
+  logoImage: { width: 170, height: 65 },
   sheet:     { flex: 1, backgroundColor: '#FFF', borderTopLeftRadius: 32, borderTopRightRadius: 32, overflow: 'hidden' },
   scroll:    { paddingHorizontal: 24, paddingTop: 28, paddingBottom: 50 },
 

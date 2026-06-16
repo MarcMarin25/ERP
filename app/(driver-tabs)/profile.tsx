@@ -42,7 +42,7 @@ export default function DriverProfileScreen() {
           </View>
 
           {/* Driver Name & Tag */}
-          <Text style={s.driverName}>{userSession?.fullName || 'Mico'}</Text>
+          <Text style={s.driverName}>{userSession?.name || 'Mico'}</Text>
           <Text style={s.driverTag}>Driver</Text>
 
           {/* Action Buttons */}
@@ -84,7 +84,7 @@ export default function DriverProfileScreen() {
 
             <View style={s.infoRow}>
               <Text style={s.infoLabel}>Full Name</Text>
-              <Text style={s.infoVal}>{userSession?.fullName || 'Mico Francis P. Marin'}</Text>
+              <Text style={s.infoVal}>{userSession?.name || 'Mico Francis P. Marin'}</Text>
             </View>
             <View style={s.infoRow}>
               <Text style={s.infoLabel}>Role</Text>
@@ -92,7 +92,7 @@ export default function DriverProfileScreen() {
             </View>
             <View style={s.infoRow}>
               <Text style={s.infoLabel}>Phone Number</Text>
-              <Text style={s.infoVal}>{userSession?.mobile || '0961 335 4271'}</Text>
+              <Text style={s.infoVal}>{userSession?.phone || '0961 335 4271'}</Text>
             </View>
             <View style={s.infoRow}>
               <Text style={s.infoLabel}>Plate Assigned</Text>
@@ -100,12 +100,12 @@ export default function DriverProfileScreen() {
             </View>
             <View style={s.infoRow}>
               <Text style={s.infoLabel}>Shift Time</Text>
-              <Text style={s.infoVal}>{userSession?.preferredShift || 'Morning'} (06:00 AM - 02:00 PM)</Text>
+              <Text style={s.infoVal}>{userSession?.shift || 'Morning'} (06:00 AM - 02:00 PM)</Text>
             </View>
-            {userSession?.createdAt ? (
+            {userSession?.created_at ? (
               <View style={s.infoRow}>
                 <Text style={s.infoLabel}>Member Since</Text>
-                <Text style={s.infoVal}>{new Date(userSession.createdAt).toLocaleString()}</Text>
+                <Text style={s.infoVal}>{new Date(userSession.created_at).toLocaleString()}</Text>
               </View>
             ) : null}
 

@@ -4,7 +4,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-  Modal, Platform, ScrollView,
+  Image, Modal, Platform, ScrollView,
   StyleSheet, Text, TextInput, View, Pressable, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -54,13 +54,11 @@ const fmtDate = (d: Date): string => {
 function Logo() {
   return (
     <View style={s.logoCard}>
-      <Text>
-        <Text style={{ color: '#1A4FA0', fontSize: 32, fontWeight: '900' }}>Anti</Text>
-        <Text style={{ color: '#22AA44', fontSize: 32, fontWeight: '900' }}>gravity</Text>
-      </Text>
-      <Text style={s.tagline}>
-        SMART & GREEN RIDE-SHARING
-      </Text>
+      <Image
+        source={require('../assets/images/devicegns-logo.jpg')}
+        style={s.logoImage}
+        resizeMode="contain"
+      />
     </View>
   );
 }
@@ -208,7 +206,7 @@ export default function DriverAuthScreen() {
   const isLogin = mode === 'login';
 
   // Login
-  const [loginMobile, setLoginMobile] = useState('');
+  const [loginPhone, setLoginPhone]   = useState('');
   const [loginPw, setLoginPw]         = useState('');
   const [showLoginPw, setShowLoginPw] = useState(true);
 
@@ -233,9 +231,9 @@ export default function DriverAuthScreen() {
   });
 
   const [form, setForm] = useState({
-    username:'', fullName:'', mobile:'', email:'',
-    region:'', province:'', cityBarangay:'',
-    licenseNumber:'', preferredShift:'Morning',
+    username:'', name:'', phone:'', email:'',
+    region:'', province:'', city_barangay:'',
+    license_number:'', shift:'Morning',
     password:'', confirmPassword:'',
   });
   const set = (k:string, v:string) => setForm(f => ({...f, [k]:v}));
@@ -248,8 +246,8 @@ export default function DriverAuthScreen() {
     return emailRegex.test(e.trim());
   };
 
-  const isMobileValid = (m: string) => {
-    const cleaned = m.replace(/\D/g, '');
+  const isPhoneValid = (p: string) => {
+    const cleaned = p.replace(/\D/g, '');
     return cleaned.length >= 10;
   };
 
@@ -257,16 +255,16 @@ export default function DriverAuthScreen() {
     form.username.trim().length > 0 &&
     dobDate !== null &&
     calcAge(dobDate) >= 18 &&
-    isMobileValid(form.mobile) &&
+    isPhoneValid(form.phone) &&
     isEmailValid(form.email);
 
   const isStep2Valid =
     form.region.trim().length > 0 &&
     form.province.trim().length > 0 &&
-    form.cityBarangay.trim().length > 0;
+    form.city_barangay.trim().length > 0;
 
   const isStep3Valid =
-    form.licenseNumber.trim().length > 0 &&
+    form.license_number.trim().length > 0 &&
     issuedDate !== null &&
     expiryDate !== null &&
     expiryDate.getTime() > issuedDate.getTime();
@@ -284,13 +282,13 @@ export default function DriverAuthScreen() {
     agreedGps;
 
   const isLoginValid =
-    isMobileValid(loginMobile) &&
+    isPhoneValid(loginPhone) &&
     loginPw.length > 0;
 
   const handleLoginSubmit = async () => {
     if (!isLoginValid) return;
     try {
-      const driver = await loginDriver(loginMobile, loginPw);
+      const driver = await loginDriver(loginPhone, loginPw);
       await login({
         role: 'driver',
         ...driver
@@ -304,24 +302,24 @@ export default function DriverAuthScreen() {
   const handleRegisterSubmit = async () => {
     if (!isStep1Valid || !isStep2Valid || !isStep3Valid || !isStep4Valid || !isStep5Valid) return;
     try {
-      const fullAddress = `${form.cityBarangay}, ${form.province}, ${form.region}`;
+      const fullAddress = `${form.city_barangay}, ${form.province}, ${form.region}`;
       const driverData = {
         username: form.username.trim(),
-        fullName: form.fullName.trim() || form.username.trim(),
-        dob: dobDate ? dobDate.toISOString().split('T')[0] : '',
+        name: form.name.trim() || form.username.trim(),
+        birth_date: dobDate ? dobDate.toISOString().split('T')[0] : '',
         age: age,
-        mobile: form.mobile.trim(),
+        phone: form.phone.trim(),
         email: form.email.trim(),
         region: form.region,
         province: form.province,
-        cityBarangay: form.cityBarangay,
+        city_barangay: form.city_barangay,
         address: fullAddress,
-        licenseNumber: form.licenseNumber.trim(),
-        licenseIssued: issuedDate ? issuedDate.toISOString().split('T')[0] : '',
-        licenseExpiry: expiryDate ? expiryDate.toISOString().split('T')[0] : '',
-        preferredShift: form.preferredShift,
+        license_number: form.license_number.trim(),
+        license_issued: issuedDate ? issuedDate.toISOString().split('T')[0] : '',
+        license_expiry: expiryDate ? expiryDate.toISOString().split('T')[0] : '',
+        shift: form.shift,
         password: form.password,
-        createdAt: '', // Will be set by registerDriver()
+        created_at: '', // Will be set by registerDriver()
       };
 
       await registerDriver(driverData);
@@ -329,7 +327,7 @@ export default function DriverAuthScreen() {
         role: 'driver',
         ...driverData
       });
-      alert('Registration successful! Welcome to Antigravity.');
+      alert('Registration successful! Welcome to DeviceGNS.');
       router.replace('/(driver-tabs)/home');
     } catch (err: any) {
       alert(err.message || 'Registration failed.');
@@ -358,9 +356,9 @@ export default function DriverAuthScreen() {
           {isLogin ? (
             <View>
               <Text style={s.loginTitle}>Sign in to your Account</Text>
-              <Text style={s.loginSub}>Enter your mobile and password to log in</Text>
-              <Text style={s.label}>Mobile Number</Text>
-              <IconInput icon="phone" placeholder="Mobile Number" value={loginMobile} onChange={setLoginMobile} keyboard="phone-pad" />
+              <Text style={s.loginSub}>Enter your phone number and password to log in</Text>
+              <Text style={s.label}>Phone Number</Text>
+              <IconInput icon="phone" placeholder="Phone Number" value={loginPhone} onChange={setLoginPhone} keyboard="phone-pad" />
               <Text style={s.label}>Password</Text>
               <IconInput icon="key" placeholder="Password" value={loginPw} onChange={setLoginPw} secure={showLoginPw} onToggleSecure={() => setShowLoginPw(p=>!p)} />
               <TouchableOpacity style={s.forgot}><Text style={s.forgotText}>Forgot Password?</Text></TouchableOpacity>
@@ -385,7 +383,7 @@ export default function DriverAuthScreen() {
                   <Text style={s.label}>Username</Text>
                   <IconInput icon="user" placeholder="Username" value={form.username} onChange={(v:string)=>set('username',v)} />
                   <Text style={s.label}>Full Name (Optional)</Text>
-                  <IconInput icon="user" placeholder="Full Name" value={form.fullName} onChange={(v:string)=>set('fullName',v)} />
+                  <IconInput icon="user" placeholder="Full Name" value={form.name} onChange={(v:string)=>set('name',v)} />
 
                   {/* DOB with auto age */}
                   <View style={s.dobRow}>
@@ -398,8 +396,8 @@ export default function DriverAuthScreen() {
                     </View>
                   </View>
 
-                  <Text style={s.label}>Mobile Number</Text>
-                  <IconInput icon="phone" placeholder="Mobile Number (e.g. 09123456789)" value={form.mobile} onChange={(v:string)=>set('mobile',v)} keyboard="phone-pad" />
+                  <Text style={s.label}>Phone Number</Text>
+                  <IconInput icon="phone" placeholder="Phone Number (e.g. 09123456789)" value={form.phone} onChange={(v:string)=>set('phone',v)} keyboard="phone-pad" />
                   <Text style={s.label}>Email Address</Text>
                   <IconInput icon="envelope" placeholder="Email Address" value={form.email} onChange={(v:string)=>set('email',v)} keyboard="email-address" />
                 </View>
@@ -422,7 +420,7 @@ export default function DriverAuthScreen() {
                   <Text style={s.label}>City / Barangay</Text>
                   <View style={[s.inputRow,{borderLeftWidth:4,borderLeftColor:'#1A4FA0'}]}>
                     <TextInput style={s.input} placeholder="Enter city, barangay, street" placeholderTextColor="#A0A0A0"
-                      value={form.cityBarangay} onChangeText={v=>set('cityBarangay',v)} />
+                      value={form.city_barangay} onChangeText={v=>set('city_barangay',v)} />
                   </View>
                 </View>
               )}
@@ -432,23 +430,23 @@ export default function DriverAuthScreen() {
                 <View>
                   <Text style={s.stepTitle}>{"Driver's License Details"}</Text>
                   <Text style={s.label}>License Number</Text>
-                  <IconInput icon="id-card" placeholder="License Number" value={form.licenseNumber} onChange={(v:string)=>set('licenseNumber',v)} />
+                  <IconInput icon="id-card" placeholder="License Number" value={form.license_number} onChange={(v:string)=>set('license_number',v)} />
                   <DateField label="Date Issued" value={issuedDate} onChange={setIssued} maxDate={new Date()} />
                   <DateField label="Expiry Date" value={expiryDate} onChange={setExpiry} />
                   <Text style={s.label}>Preferred Shift</Text>
                   <View style={{flexDirection:'row',gap:10,marginTop:4}}>
-                    {['Morning','Afternoon','Evening','Flexible'].map(sh => (
+                    {['Morning','Evening','Night'].map(sh => (
                       <Pressable
                         key={sh}
-                        onPress={() => set('preferredShift',sh)}
+                        onPress={() => set('shift',sh)}
                         style={({ pressed }) => [
                           s.shiftBtn,
-                          form.preferredShift===sh && s.shiftActive,
+                          form.shift===sh && s.shiftActive,
                           Platform.OS === 'ios' && pressed && { opacity: 0.8 }
                         ]}
                         android_ripple={{ color: 'rgba(26, 79, 160, 0.15)' }}
                       >
-                        <Text style={[s.shiftText, form.preferredShift===sh && s.shiftTextActive]}>{sh}</Text>
+                        <Text style={[s.shiftText, form.shift===sh && s.shiftTextActive]}>{sh}</Text>
                       </Pressable>
                     ))}
                   </View>
@@ -578,7 +576,7 @@ const s = StyleSheet.create({
   hero:      { backgroundColor:BLUE, paddingTop:12, paddingBottom:24, alignItems:'center' },
   back:      { position:'absolute', top:16, left:20, zIndex:10, padding:6 },
   logoCard:  { backgroundColor:'#FFF', borderRadius:8, paddingHorizontal:24, paddingVertical:12, alignItems:'center', marginTop:8, elevation:5 },
-  tagline:   { fontSize:9, fontWeight:'700', color:'#222', letterSpacing:1.2, marginTop:2 },
+  logoImage: { width:170, height:65 },
   sheet:     { flex:1, backgroundColor:'#FFF', borderTopLeftRadius:32, borderTopRightRadius:32, overflow:'hidden' },
   scroll:    { paddingHorizontal:24, paddingTop:28, paddingBottom:50 },
 

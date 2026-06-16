@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs, Redirect } from 'expo-router';
-import { View, StyleSheet, TouchableOpacity, Platform, Text, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform, Text, ActivityIndicator, Image } from 'react-native';
 import { FontAwesome, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -68,35 +68,38 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
 
           // Render home tab in center
           if (route.name === 'home') {
+            const homeSource = isFocused 
+              ? require('../../assets/images/home page icon BLUE.png') 
+              : require('../../assets/images/home page icon.png');
             return (
               <View key={route.key} style={s.homeTabWrapper}>
                 <TouchableOpacity
                   onPress={onPress}
                   activeOpacity={0.85}
-                  style={[s.homeButton, isFocused && s.homeButtonActive]}
+                  style={s.homeButtonContainer}
                 >
-                  <Ionicons name="home" size={32} color="#FFF" />
+                  <Image source={homeSource} style={s.homeImage} />
                 </TouchableOpacity>
               </View>
             );
           }
 
-          // Icon mapper for other tabs
-          let iconComponent;
+          // Icon mapper for other passenger tabs
+          let iconSource;
           if (route.name === 'history') {
-            iconComponent = <FontAwesome name="car" size={22} color={isFocused ? '#1A4FA0' : '#1A4FA0'} />;
+            iconSource = isFocused 
+              ? require('../../assets/images/HISTORY ICON BLUE.png') 
+              : require('../../assets/images/HISTORY ICON.png');
           } else if (route.name === 'pinned') {
-            iconComponent = <MaterialCommunityIcons name="map-marker-star" size={24} color={isFocused ? '#1A4FA0' : '#1A4FA0'} />;
+            iconSource = isFocused 
+              ? require('../../assets/images/DASHBOARD ICON BLUE.png') 
+              : require('../../assets/images/DASHBOARD ICON.png');
           } else if (route.name === 'support') {
-            iconComponent = <MaterialCommunityIcons name="chat-processing-outline" size={24} color={isFocused ? '#1A4FA0' : '#1A4FA0'} />;
+            iconSource = require('../../assets/images/icon vio and supp.png');
           } else if (route.name === 'profile') {
-            iconComponent = (
-              <View style={s.avatarBorder}>
-                <View style={s.avatarBg}>
-                  <Text style={{ fontSize: 13 }}>👦</Text>
-                </View>
-              </View>
-            );
+            iconSource = isFocused 
+              ? require('../../assets/images/PROFILE BLUE ICON.png') 
+              : require('../../assets/images/prof icon.png');
           }
 
           return (
@@ -106,15 +109,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
               activeOpacity={0.7}
               style={s.tabItem}
             >
-              {route.name === 'profile' ? (
-                <View style={[s.iconCircle, isFocused && s.activeIconCircle]}>
-                  {iconComponent}
-                </View>
-              ) : (
-                <View style={[s.iconCircle, isFocused && s.activeIconCircle]}>
-                  {iconComponent}
-                </View>
-              )}
+              <Image source={iconSource} style={s.tabImage} />
             </TouchableOpacity>
           );
         })}
@@ -169,84 +164,43 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     height: '100%',
   },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: '#1A4FA0',
-    backgroundColor: '#FFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#1A4FA0',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-      },
-      android: {
-        elevation: 2,
-      }
-    })
-  },
-  activeIconCircle: {
-    backgroundColor: '#EAF1FB',
-    borderColor: '#1A4FA0',
-    borderWidth: 2,
-    transform: [{ scale: 1.05 }],
+  tabImage: {
+    width: 38,
+    height: 38,
+    resizeMode: 'contain',
   },
   homeTabWrapper: {
     width: 80,
     height: 80,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -40,
+    marginTop: -38,
     zIndex: 10,
   },
-  homeButton: {
+  homeButtonContainer: {
     width: 68,
     height: 68,
-    borderRadius: 34,
-    backgroundColor: '#1A4FA0',
-    borderWidth: 4,
-    borderColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
     ...Platform.select({
       ios: {
         shadowColor: '#1A4FA0',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.3,
-        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
       },
       android: {
-        elevation: 6,
+        elevation: 4,
       },
       web: {
         cursor: 'pointer',
-        boxShadow: '0px 6px 12px rgba(26, 79, 160, 0.3)'
+        boxShadow: '0px 4px 8px rgba(26, 79, 160, 0.2)'
       }
     })
   },
-  homeButtonActive: {
-    backgroundColor: '#163D80',
-    transform: [{ scale: 1.05 }],
-  },
-  avatarBorder: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 20,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarBg: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#D6E4F7',
-    justifyContent: 'center',
-    alignItems: 'center',
+  homeImage: {
+    width: 68,
+    height: 68,
+    resizeMode: 'contain',
   }
 });

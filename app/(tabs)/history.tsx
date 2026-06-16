@@ -6,109 +6,173 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
+  Image,
+  ImageBackground,
+  TextInput,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { usePassengerData } from '../_layout';
 
 export default function HistoryScreen() {
-  const { trips } = usePassengerData();
-  const [filter, setFilter] = useState<'All' | 'Completed' | 'Cancelled'>('All');
+  const { trips, setTrips } = usePassengerData();
+  const [searchText, setSearchText] = useState('');
+  const [activeSubTab, setActiveSubTab] = useState<'History' | 'Cancelled'>('Cancelled');
 
-  // Filter logic
+  const toggleFavorite = (tripId: string) => {
+    setTrips(prev => prev.map(t => {
+      if (t.id === tripId) {
+        const isFav = !t.isFavorite;
+        return { ...t, isFavorite: isFav };
+      }
+      return t;
+    }));
+  };
+
+  // Filter completed or cancelled trips to match active tab
   const filteredTrips = trips.filter(trip => {
-    if (filter === 'All') return true;
-    return trip.status === filter;
+    const matchesTab = activeSubTab === 'Cancelled'
+      ? trip.status === 'Cancelled'
+      : trip.status === 'Completed';
+
+    const matchesSearch = searchText
+      ? trip.date.toLowerCase().includes(searchText.toLowerCase()) ||
+        trip.pickup.toLowerCase().includes(searchText.toLowerCase()) ||
+        trip.destination.toLowerCase().includes(searchText.toLowerCase())
+      : true;
+    return matchesTab && matchesSearch;
   });
 
   return (
     <SafeAreaView style={s.container} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor="#1A4FA0" />
-      
-      {/* Header Banner */}
-      <View style={s.header}>
-        <Text style={s.headerTitle}>Trip History</Text>
-        <Text style={s.headerSubtitle}>View and track your ride summaries</Text>
-      </View>
+      <StatusBar barStyle="dark-content" backgroundColor="#EAF1FB" />
 
-      {/* Filter Tabs */}
-      <View style={s.filterRow}>
-        {(['All', 'Completed', 'Cancelled'] as const).map(tab => (
-          <TouchableOpacity
-            key={tab}
-            activeOpacity={0.7}
-            onPress={() => setFilter(tab)}
-            style={[
-              s.filterTab,
-              filter === tab && s.activeFilterTab
-            ]}
-          >
-            <Text style={[
-              s.filterText,
-              filter === tab && s.activeFilterText
-            ]}>
-              {tab}
-            </Text>
+      {/* ── DeviceGNS Logo Card Header ── */}
+      <ImageBackground 
+        source={require('../../assets/images/BLUE NAV TOP.png')} 
+        style={s.logoHeader}
+        resizeMode="cover"
+      >
+        <View style={s.logoCard}>
+          <Image 
+            source={require('../../assets/images/devicegns-logo.jpg')} 
+            style={s.logoImage} 
+            resizeMode="contain"
+          />
+        </View>
+      </ImageBackground>
+
+      {/* ── Trip Summary Content Sheet ── */}
+      <View style={s.sheet}>
+        
+        {/* Header Row: Title & Filter */}
+        <View style={s.sheetHeaderRow}>
+          <Text style={s.sheetTitle}>Trip Summary</Text>
+          <TouchableOpacity style={s.filterButton} activeOpacity={0.7}>
+            <Text style={s.filterButtonText}>Filter: By Date</Text>
           </TouchableOpacity>
-        ))}
-      </View>
+        </View>
 
-      {/* Trips list */}
-      <ScrollView contentContainerStyle={s.scrollContainer} showsVerticalScrollIndicator={false}>
-        {filteredTrips.length === 0 ? (
-          <View style={s.emptyContainer}>
-            <MaterialCommunityIcons name="car-off" size={60} color="#B2CBEB" />
-            <Text style={s.emptyText}>No rides found under this category.</Text>
+        {/* Sub-Header Tabs Row */}
+        <View style={s.subHeaderTabs}>
+          <TouchableOpacity onPress={() => setActiveSubTab('History')} activeOpacity={0.7}>
+            <Text style={[
+              s.historyLabel,
+              activeSubTab === 'History' ? s.tabActiveHistory : s.tabInactive
+            ]}>History</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setActiveSubTab('Cancelled')} activeOpacity={0.7}>
+            <Text style={[
+              s.cancelledLabel,
+              activeSubTab === 'Cancelled' ? s.tabActiveCancelled : s.tabInactive
+            ]}>Cancelled</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Date / YYYY/MM/DD Search Input */}
+        <View style={s.searchBarContainer}>
+          <TextInput
+            style={s.searchInput}
+            placeholder="YYYY/MM/DD"
+            placeholderTextColor="#889BB5"
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+          <View style={s.searchActions}>
+            <Ionicons name="calendar-outline" size={18} color="#1A4FA0" style={s.searchIcon} />
+            <View style={s.searchDivider} />
+            <Ionicons name="search" size={18} color="#1A4FA0" style={s.searchIcon} />
           </View>
-        ) : (
-          filteredTrips.map(trip => (
+        </View>
+
+        <Text style={s.recentLabel}>Recent</Text>
+
+        {/* Scrollable list of trips */}
+        <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+          {filteredTrips.map(trip => (
             <View key={trip.id} style={s.tripCard}>
-              {/* Header row: date & status */}
+              {/* Driver Info & Date */}
               <View style={s.tripHeader}>
-                <View style={s.dateTimeBox}>
-                  <Ionicons name="calendar-outline" size={14} color="#666" />
-                  <Text style={s.dateText}>{trip.date} • {trip.time}</Text>
-                </View>
-                <View style={[
-                  s.statusBadge,
-                  trip.status === 'Completed' ? s.completedBadge : s.cancelledBadge
-                ]}>
-                  <Text style={[
-                    s.statusText,
-                    trip.status === 'Completed' ? s.completedText : s.cancelledText
-                  ]}>
-                    {trip.status}
-                  </Text>
-                </View>
+                <Text style={s.driverText}>Driven by: {trip.driverName || 'Mico'}</Text>
+                <Text style={s.dateText}>Past trip • {trip.date} • {trip.time}</Text>
               </View>
 
-              {/* Route details */}
+              {/* Route bubbles */}
               <View style={s.routeContainer}>
-                {/* Pickup node */}
+                {/* Pickup */}
                 <View style={s.routeRow}>
-                  <View style={[s.indicatorNode, { backgroundColor: '#22B04B' }]} />
-                  <Text style={s.locationText} numberOfLines={1}>{trip.pickup}</Text>
+                  <Ionicons name="location" size={18} color="#D02A30" style={s.pinIcon} />
+                  <View style={[s.locationBubble, s.pickupBubble]}>
+                    <Text style={s.pickupText} numberOfLines={1}>{trip.pickup}</Text>
+                  </View>
                 </View>
 
-                {/* Vertical dash connection */}
-                <View style={s.dashLine} />
-
-                {/* Destination node */}
+                {/* Destination */}
                 <View style={s.routeRow}>
-                  <View style={[s.indicatorNode, { backgroundColor: '#1A4FA0' }]} />
-                  <Text style={s.locationText} numberOfLines={1}>{trip.destination}</Text>
+                  <Ionicons name="location" size={18} color="#22B04B" style={s.pinIcon} />
+                  <View style={[s.locationBubble, s.destinationBubble]}>
+                    <Text style={s.destinationText} numberOfLines={1}>{trip.destination}</Text>
+                  </View>
                 </View>
               </View>
 
-              {/* Footer: cost */}
-              <View style={s.tripFooter}>
-                <Text style={s.priceLabel}>Total Fare Paid</Text>
-                <Text style={s.priceValue}>₱{trip.price.toFixed(2)}</Text>
+              {/* Distance and Duration Info */}
+              <View style={s.tripMetrics}>
+                <Text style={s.metricText}>Distance: {trip.distance || '166.63 km'}</Text>
+                <Text style={s.metricText}>Time Duration : {trip.duration || '6 mins'}</Text>
               </View>
+
+              {/* Fare */}
+              <View style={s.fareRow}>
+                <Text style={s.fareLabel}>Fare</Text>
+                <Text style={s.fareValue}>₱ {trip.price.toFixed(2)}</Text>
+              </View>
+
+              {/* Side-by-side action buttons */}
+              <View style={s.actionsRow}>
+                <TouchableOpacity style={s.actionBtn} activeOpacity={0.8}>
+                  <Text style={s.actionBtnText}>View Details</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[s.actionBtn, trip.isFavorite && s.actionBtnActive]} 
+                  activeOpacity={0.8}
+                  onPress={() => toggleFavorite(trip.id)}
+                >
+                  <Text style={s.actionBtnText}>
+                    {trip.isFavorite ? 'Remove Favorite' : 'Add to Favorites'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Book Again button */}
+              <TouchableOpacity style={s.bookAgainBtn} activeOpacity={0.85}>
+                <Text style={s.bookAgainBtnText}>Book Again</Text>
+              </TouchableOpacity>
             </View>
-          ))
-        )}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -118,72 +182,135 @@ const s = StyleSheet.create({
     flex: 1,
     backgroundColor: '#EAF1FB',
   },
-  header: {
-    backgroundColor: '#1A4FA0',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    elevation: 4,
+  logoHeader: {
+    width: '100%',
+    paddingTop: 45,
+    paddingBottom: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#FFF',
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#D0E1F9',
-    marginTop: 4,
-  },
-  filterRow: {
-    flexDirection: 'row',
+  logoCard: {
     backgroundColor: '#FFF',
-    borderRadius: 14,
-    padding: 4,
-    marginHorizontal: 20,
-    marginTop: -16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    elevation: 2,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
+    width: '48%',
+    height: 60,
   },
-  filterTab: {
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  sheet: {
     flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 10,
-  },
-  activeFilterTab: {
-    backgroundColor: '#1A4FA0',
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  activeFilterText: {
-    color: '#FFF',
-  },
-  scrollContainer: {
+    backgroundColor: '#EDF5FD', // Soft blue background color matching Screenshot 2 & 5
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#EAF1FB',
+    borderBottomWidth: 0,
+    marginTop: -18,
     paddingHorizontal: 20,
+  },
+  sheetHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingTop: 24,
-    paddingBottom: 100, // Make space for the bottom tab bar
+  },
+  sheetTitle: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#104595',
+  },
+  filterButton: {
+    borderColor: '#104595',
+    borderWidth: 1.5,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: '#FFF',
+  },
+  filterButtonText: {
+    color: '#104595',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  subHeaderTabs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 14,
+    gap: 16,
+  },
+  historyLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#4A5D78',
+  },
+  cancelledLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#22B04B',
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#A4C3E8',
+    borderRadius: 8,
+    height: 40,
+    backgroundColor: '#FFF',
+    paddingLeft: 12,
+    marginTop: 12,
+  },
+  searchInput: {
+    flex: 1,
+    height: '100%',
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  searchActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: '100%',
+    paddingRight: 10,
+  },
+  searchDivider: {
+    width: 1.5,
+    height: 20,
+    backgroundColor: '#A4C3E8',
+    marginHorizontal: 8,
+  },
+  searchIcon: {
+    paddingHorizontal: 2,
+  },
+  recentLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#104595',
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  scroll: {
+    paddingBottom: 110,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 80,
+    paddingVertical: 60,
   },
-  emptyText: {
-    fontSize: 15,
-    color: '#666',
-    marginTop: 14,
-    textAlign: 'center',
+  noBookingImage: {
+    width: 250,
+    height: 250,
   },
   tripCard: {
     backgroundColor: '#FFF',
@@ -195,91 +322,135 @@ const s = StyleSheet.create({
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 5,
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
   },
   tripHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    paddingBottom: 10,
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  dateTimeBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  driverText: {
+    fontSize: 13,
+    color: '#104595',
+    fontWeight: '700',
   },
   dateText: {
     fontSize: 12,
-    color: '#666',
+    color: '#104595',
     fontWeight: '500',
   },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  completedBadge: {
-    backgroundColor: 'rgba(34, 176, 75, 0.1)',
-  },
-  cancelledBadge: {
-    backgroundColor: 'rgba(208, 42, 48, 0.1)',
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  completedText: {
-    color: '#22B04B',
-  },
-  cancelledText: {
-    color: '#D02A30',
-  },
   routeContainer: {
-    marginBottom: 14,
+    gap: 8,
+    marginBottom: 12,
   },
   routeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
-  indicatorNode: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+  pinIcon: {
+    width: 18,
+    alignItems: 'center',
   },
-  locationText: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
+  locationBubble: {
     flex: 1,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: '#C6D9F2',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    backgroundColor: '#F7FAFC',
   },
-  dashLine: {
-    width: 1.5,
-    height: 14,
-    backgroundColor: '#A2C2E7',
-    marginLeft: 4,
-    marginVertical: 2,
+  pickupBubble: {},
+  destinationBubble: {},
+  pickupText: {
+    fontSize: 12,
+    color: '#B63A3A',
+    fontWeight: '500',
   },
-  tripFooter: {
+  destinationText: {
+    fontSize: 12,
+    color: '#22B04B',
+    fontWeight: '500',
+  },
+  tripMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  metricText: {
+    fontSize: 12.5,
+    color: '#104595',
+    fontWeight: '600',
+  },
+  fareRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    paddingTop: 12,
+    borderTopColor: '#F0F5FC',
+    paddingTop: 10,
+    marginBottom: 12,
   },
-  priceLabel: {
-    fontSize: 13,
-    color: '#666',
-    fontWeight: '500',
-  },
-  priceValue: {
-    fontSize: 17,
+  fareLabel: {
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#1A4FA0',
-  }
+    color: '#B63A3A',
+  },
+  fareValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#B63A3A',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 10,
+  },
+  actionBtn: {
+    flex: 1,
+    height: 38,
+    backgroundColor: '#5A94FF',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionBtnText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  bookAgainBtn: {
+    height: 42,
+    backgroundColor: '#004DAA',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bookAgainBtnText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  tabActiveHistory: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#104595',
+  },
+  tabActiveCancelled: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#22B04B',
+  },
+  tabInactive: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#889BB5',
+  },
+  actionBtnActive: {
+    backgroundColor: '#E25B5B',
+  },
 });

@@ -2,7 +2,7 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, StyleSheet, View } from 'react-native';
 import { useAuth } from './_layout';
 
 export default function SplashScreen() {
@@ -42,11 +42,11 @@ export default function SplashScreen() {
       <StatusBar style="light" />
       <Animated.View style={[s.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
         <View style={s.logoGroup}>
-          <Text style={s.brandRow}>
-            <Text style={s.anti}>Anti</Text>
-            <Text style={s.gravity}>gravity</Text>
-          </Text>
-          <Text style={s.tagline}>SMART & GREEN RIDE-SHARING</Text>
+          <Image
+            source={require('../assets/images/devicegns-logo.jpg')}
+            style={s.logoImage}
+            resizeMode="contain"
+          />
         </View>
       </Animated.View>
     </View>
@@ -57,9 +57,6 @@ const s = StyleSheet.create({
   container:   { flex: 1, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' },
   card:        { backgroundColor: '#FFF', width: 280, height: 280, borderRadius: 24, justifyContent: 'center', alignItems: 'center', elevation: 20, padding: 24 },
   logoGroup:   { alignItems: 'center' },
-  brandRow:    { flexDirection: 'row' },
-  anti:        { fontSize: 42, fontWeight: '900', color: '#1A4FA0' },
-  gravity:     { fontSize: 42, fontWeight: '900', color: '#22AA44' },
-  tagline:     { fontSize: 10, fontWeight: '700', color: '#666', letterSpacing: 1.2, marginTop: 8, textAlign: 'center' },
+  logoImage:   { width: 220, height: 100 },
 });
 

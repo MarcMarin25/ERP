@@ -9,6 +9,7 @@ import {
   TextInput,
   Modal,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome, Ionicons } from '@expo/vector-icons';
@@ -41,7 +42,7 @@ export default function ProfileScreen() {
   // Dropdown/Picker modals
   const [genderModal, setGenderModal] = useState(false);
   const [dobPickerShow, setDobPickerShow] = useState(false);
-  const [dobTempDate, setDobTempDate] = useState<Date>(new Date(profile.dob));
+  const [dobTempDate, setDobTempDate] = useState<Date>(new Date(profile.birth_date));
   const [iosDobModal, setIosDobModal] = useState(false);
 
   // Field change helper
@@ -51,7 +52,7 @@ export default function ProfileScreen() {
 
   // DOB change handlers
   const openDobPicker = () => {
-    setDobTempDate(new Date(editForm.dob));
+    setDobTempDate(new Date(editForm.birth_date));
     if (Platform.OS === 'ios') {
       setIosDobModal(true);
     } else if (Platform.OS === 'android') {
@@ -64,7 +65,7 @@ export default function ProfileScreen() {
     if (d) {
       const formattedDate = d.toISOString().split('T')[0];
       const ageStr = String(calcAge(d));
-      setEditForm(prev => ({ ...prev, dob: formattedDate, age: ageStr }));
+      setEditForm(prev => ({ ...prev, birth_date: formattedDate, age: ageStr }));
     }
   };
 
@@ -77,7 +78,7 @@ export default function ProfileScreen() {
   const saveIosDob = () => {
     const formattedDate = dobTempDate.toISOString().split('T')[0];
     const ageStr = String(calcAge(dobTempDate));
-    setEditForm(prev => ({ ...prev, dob: formattedDate, age: ageStr }));
+    setEditForm(prev => ({ ...prev, birth_date: formattedDate, age: ageStr }));
     setIosDobModal(false);
   };
 
@@ -91,7 +92,7 @@ export default function ProfileScreen() {
 
   const handleUpdate = async () => {
     if (activeTab === 'Basic') {
-      if (!editForm.username.trim() || !editForm.mobile.trim() || !editForm.email.trim()) {
+      if (!editForm.username.trim() || !editForm.phone.trim() || !editForm.email.trim()) {
         alert('Please fill out all required fields.');
         return;
       }
@@ -136,81 +137,71 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={s.container} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#EAF1FB" />
+      <StatusBar barStyle="light-content" backgroundColor="#1A4FA0" />
 
       {/* ── VIEW PROFILE MODE ── */}
       {!isEditing ? (
-        <ScrollView contentContainerStyle={s.viewScroll} showsVerticalScrollIndicator={false}>
-          {/* Top Hero Banner */}
-          <View style={s.viewHero}>
-            <View style={s.largeAvatarCircle}>
-              <Text style={{ fontSize: 50 }}>👦</Text>
+        <View style={{ flex: 1 }}>
+          {/* Blue Grid Header matching DDGNS screenshot */}
+          <View style={s.gridHeader}>
+            {/* Grid Lines */}
+            <View style={StyleSheet.absoluteFill}>
+              {/* Horizontal Lines */}
+              <View style={[s.gridLineH, { top: '20%' }]} />
+              <View style={[s.gridLineH, { top: '40%' }]} />
+              <View style={[s.gridLineH, { top: '60%' }]} />
+              <View style={[s.gridLineH, { top: '80%' }]} />
+              
+              {/* Vertical Lines */}
+              {Array.from({ length: 12 }).map((_, i) => (
+                <View key={i} style={[s.gridLineV, { left: `${(i + 1) * 8.3}%` }]} />
+              ))}
             </View>
-            <Text style={s.viewName}>{profile.fullName || profile.username}</Text>
-            <Text style={s.viewEmail}>{profile.email}</Text>
-            <Text style={s.viewRoleBadge}>Passenger</Text>
+
+            <View style={s.headerContent}>
+              <TouchableOpacity onPress={() => router.back()} style={s.backButton}>
+                <Ionicons name="arrow-back" size={24} color="#FFF" />
+              </TouchableOpacity>
+              <Text style={s.headerTitle}>Profile</Text>
+            </View>
           </View>
 
-          {/* Quick Info Grid */}
-          <View style={s.quickInfoSection}>
-            <Text style={s.sectionHeader}>Account Information</Text>
-            
-            <View style={s.infoRow}>
-              <View style={s.infoIconBox}><FontAwesome name="user" size={16} color="#1A4FA0" /></View>
-              <View style={s.infoTexts}>
-                <Text style={s.infoLabel}>Username</Text>
-                <Text style={s.infoValue}>{profile.username}</Text>
-              </View>
-            </View>
-            
-            <View style={s.infoRow}>
-              <View style={s.infoIconBox}><FontAwesome name="phone" size={16} color="#1A4FA0" /></View>
-              <View style={s.infoTexts}>
-                <Text style={s.infoLabel}>Mobile Number</Text>
-                <Text style={s.infoValue}>{profile.mobile}</Text>
-              </View>
-            </View>
-
-            <View style={s.infoRow}>
-              <View style={s.infoIconBox}><Ionicons name="calendar" size={16} color="#1A4FA0" /></View>
-              <View style={s.infoTexts}>
-                <Text style={s.infoLabel}>Date of Birth • Age</Text>
-                <Text style={s.infoValue}>{profile.dob} ({profile.age} years old)</Text>
-              </View>
-            </View>
-            
-            <View style={s.infoRow}>
-              <View style={s.infoIconBox}><FontAwesome name="home" size={16} color="#1A4FA0" /></View>
-              <View style={s.infoTexts}>
-                <Text style={s.infoLabel}>Location Address</Text>
-                <Text style={s.infoValue}>{profile.address}</Text>
-              </View>
-            </View>
-
-            {profile.createdAt ? (
-              <View style={s.infoRow}>
-                <View style={s.infoIconBox}><Ionicons name="time" size={16} color="#1A4FA0" /></View>
-                <View style={s.infoTexts}>
-                  <Text style={s.infoLabel}>Member Since</Text>
-                  <Text style={s.infoValue}>{new Date(profile.createdAt).toLocaleString()}</Text>
+          {/* White Card Body */}
+          <View style={s.whiteCard}>
+            <ScrollView contentContainerStyle={s.viewScroll} showsVerticalScrollIndicator={false}>
+              {/* Avatar with edit icon */}
+              <View style={s.avatarSection}>
+                <View style={s.avatarContainer}>
+                  <View style={s.avatarCircle}>
+                    <Image 
+                      source={require('../../assets/images/prof icon.png')} 
+                      style={s.avatarImage} 
+                    />
+                  </View>
+                  {/* Edit icon overlay */}
+                  <View style={s.editIconCircle}>
+                    <Ionicons name="pencil" size={16} color="#1A4FA0" />
+                  </View>
                 </View>
+
+                {/* Name and role */}
+                <Text style={s.profileName}>{profile.name || profile.username}</Text>
+                <Text style={s.profileRole}>Passenger</Text>
               </View>
-            ) : null}
-          </View>
 
-          {/* Core Action Buttons */}
-          <View style={s.viewActionContainer}>
-            <TouchableOpacity style={s.personalInfoBtn} onPress={handleEnterEdit}>
-              <Ionicons name="person-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
-              <Text style={s.personalInfoBtnText}>Personal Info</Text>
-            </TouchableOpacity>
+              {/* Action Buttons matching DDGNS - outlined style */}
+              <View style={s.buttonSection}>
+                <TouchableOpacity style={s.outlinedButton} onPress={handleEnterEdit} activeOpacity={0.7}>
+                  <Text style={s.outlinedButtonText}>Personal Info</Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
-              <Text style={s.logoutBtnText}>Logout</Text>
-            </TouchableOpacity>
+                <TouchableOpacity style={s.outlinedButton} onPress={handleLogout} activeOpacity={0.7}>
+                  <Text style={s.outlinedButtonText}>Logout</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
-        </ScrollView>
+        </View>
       ) : (
         
         // ── EDIT PROFILE MODE (Based on Image 2, 3) ──
@@ -272,8 +263,8 @@ export default function ProfileScreen() {
                   <TextInput
                     style={s.input}
                     placeholder="Full Name"
-                    value={editForm.fullName}
-                    onChangeText={v => handleFieldChange('fullName', v)}
+                    value={editForm.name}
+                    onChangeText={v => handleFieldChange('name', v)}
                   />
                 </View>
 
@@ -298,13 +289,13 @@ export default function ProfileScreen() {
                       <View style={s.dobWebBox}>
                         <input
                           type="date"
-                          value={editForm.dob}
+                          value={editForm.birth_date}
                           max={new Date().toISOString().split('T')[0]}
                           onChange={(e) => {
                             const d = e.target.value ? new Date(e.target.value) : null;
                             if (d && !isNaN(d.getTime())) {
                               const ageStr = String(calcAge(d));
-                              setEditForm(prev => ({ ...prev, dob: e.target.value, age: ageStr }));
+                              setEditForm(prev => ({ ...prev, birth_date: e.target.value, age: ageStr }));
                             }
                           }}
                           style={{
@@ -322,7 +313,7 @@ export default function ProfileScreen() {
                       </View>
                     ) : (
                       <TouchableOpacity style={s.dobBox} onPress={openDobPicker} activeOpacity={0.8}>
-                        <Text style={s.dobValueText}>{editForm.dob}</Text>
+                        <Text style={s.dobValueText}>{editForm.birth_date}</Text>
                         <FontAwesome name="calendar" size={16} color="#1A4FA0" />
                       </TouchableOpacity>
                     )}
@@ -338,16 +329,16 @@ export default function ProfileScreen() {
                   </View>
                 </View>
 
-                {/* Mobile Number */}
-                <Text style={s.label}>Mobile Number</Text>
+                {/* Phone Number */}
+                <Text style={s.label}>Phone Number</Text>
                 <View style={s.inputRow}>
                   <View style={s.iconBox}><FontAwesome name="phone" size={16} color="#FFF" /></View>
                   <TextInput
                     style={s.input}
-                    placeholder="Mobile Number"
+                    placeholder="Phone Number"
                     keyboardType="phone-pad"
-                    value={editForm.mobile}
-                    onChangeText={v => handleFieldChange('mobile', v)}
+                    value={editForm.phone}
+                    onChangeText={v => handleFieldChange('phone', v)}
                   />
                 </View>
 
@@ -517,138 +508,133 @@ const BLUE = '#1A4FA0';
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EAF1FB',
+    backgroundColor: BLUE,
   },
-  
-  // VIEW MODE
-  viewScroll: {
-    paddingHorizontal: 24,
+
+  // ── VIEW MODE - DDGNS Style ──
+  gridHeader: {
+    height: 95,
+    backgroundColor: BLUE,
+    position: 'relative',
+    justifyContent: 'center',
     paddingTop: 30,
-    paddingBottom: 100,
+    overflow: 'hidden',
   },
-  viewHero: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    paddingVertical: 32,
-    paddingHorizontal: 16,
+  headerContent: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#EAF1FB',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
+    paddingHorizontal: 16,
+    zIndex: 10,
+    gap: 8,
   },
-  largeAvatarCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#D6E4F7',
+  gridLineH: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  gridLineV: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  backButton: {
+    padding: 4,
+  },
+  headerTitle: {
+    color: '#FFF',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  whiteCard: {
+    flex: 1,
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    overflow: 'hidden',
+  },
+  viewScroll: {
+    paddingTop: 40,
+    paddingBottom: 120,
+    alignItems: 'center',
+  },
+
+  // Avatar Section
+  avatarSection: {
+    alignItems: 'center',
+    marginBottom: 60,
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  avatarCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#1E3A6E',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 3,
-    borderColor: BLUE,
+    overflow: 'hidden',
   },
-  viewName: {
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  editIconCircle: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#A2C2E7',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  profileName: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: BLUE,
+    color: '#222',
+    textAlign: 'center',
   },
-  viewEmail: {
-    fontSize: 14,
-    color: '#666',
+  profileRole: {
+    fontSize: 16,
+    color: BLUE,
+    fontWeight: '700',
     marginTop: 4,
   },
-  viewRoleBadge: {
-    backgroundColor: '#22B04B',
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '800',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 12,
-    letterSpacing: 0.5,
-  },
-  quickInfoSection: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 20,
-    marginTop: 24,
-    borderWidth: 1.5,
-    borderColor: '#EAF1FB',
-    elevation: 2,
-  },
-  sectionHeader: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: BLUE,
-    marginBottom: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    paddingBottom: 8,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  infoIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#EAF1FB',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  infoTexts: {
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: 11,
-    color: '#777',
-    fontWeight: '600',
-  },
-  infoValue: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '600',
-    marginTop: 1,
-  },
-  viewActionContainer: {
-    marginTop: 30,
+
+  // Buttons - DDGNS outlined style
+  buttonSection: {
+    width: '100%',
+    paddingHorizontal: 30,
     gap: 14,
   },
-  personalInfoBtn: {
-    backgroundColor: BLUE,
-    borderRadius: 12,
+  outlinedButton: {
+    borderWidth: 2,
+    borderColor: BLUE,
+    borderRadius: 8,
     height: 52,
-    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 2,
+    backgroundColor: '#FFF',
   },
-  personalInfoBtnText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  logoutBtn: {
-    backgroundColor: '#D02A30',
-    borderRadius: 12,
-    height: 52,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 2,
-  },
-  logoutBtnText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700',
+  outlinedButtonText: {
+    color: BLUE,
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 
   // EDIT MODE

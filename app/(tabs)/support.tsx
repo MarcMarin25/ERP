@@ -9,6 +9,8 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  Image,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -79,20 +81,19 @@ export default function SupportScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#EAF1FB" />
       
       {/* ── DeviceGNS Logo Card Header ── */}
-      <View style={s.logoHeader}>
+      <ImageBackground 
+        source={require('../../assets/images/BLUE NAV TOP.png')} 
+        style={s.logoHeader}
+        resizeMode="cover"
+      >
         <View style={s.logoCard}>
-          <Text style={s.logoText}>
-            <Text style={{ color:'#000', fontSize:26, fontWeight:'800' }}>D</Text>
-            <Text style={{ color:'#000', fontSize:26, fontWeight:'700' }}>evice</Text>
-            <Text style={{ color:'#22B04B', fontSize:30, fontWeight:'800' }}>G</Text>
-            <Text style={{ color:'#000', fontSize:30, fontWeight:'800' }}>N</Text>
-            <Text style={{ color:'#3399EE', fontSize:30, fontWeight:'800' }}>S</Text>
-          </Text>
-          <Text style={s.tagline}>
-            DEVICEDESIGN <Text style={{color:'#22B04B'}}>GREEN</Text>{' & '}<Text style={{color:'#3399EE'}}>SMART</Text>
-          </Text>
+          <Image 
+            source={require('../../assets/images/devicegns-logo.jpg')} 
+            style={s.logoImage} 
+            resizeMode="contain"
+          />
         </View>
-      </View>
+      </ImageBackground>
 
       {/* ── FAQ Sheet Container ── */}
       <View style={s.sheet}>
@@ -103,29 +104,16 @@ export default function SupportScreen() {
 
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
           {faqs.map(item => {
-            const isExpanded = expandedId === item.id;
             return (
-              <View key={item.id} style={[s.faqCard, isExpanded && s.faqCardActive]}>
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() => toggleExpand(item.id)}
-                  style={s.faqQuestionRow}
-                >
-                  <Text style={[s.faqQuestionText, isExpanded && s.faqQuestionTextActive]}>
+              <View key={item.id} style={s.faqCard}>
+                <View style={s.faqQuestionRow}>
+                  <Text style={s.faqQuestionText}>
                     {item.q}
                   </Text>
-                  <Ionicons
-                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={20}
-                    color={isExpanded ? '#1A4FA0' : '#888'}
-                  />
-                </TouchableOpacity>
-                
-                {isExpanded && (
-                  <View style={s.faqAnswerContainer}>
-                    <Text style={s.faqAnswerText}>{item.a}</Text>
-                  </View>
-                )}
+                </View>
+                <View style={s.faqAnswerContainer}>
+                  <Text style={s.faqAnswerText}>{item.a}</Text>
+                </View>
               </View>
             );
           })}
@@ -141,44 +129,41 @@ const s = StyleSheet.create({
     backgroundColor: '#EAF1FB',
   },
   logoHeader: {
-    paddingHorizontal: 24,
-    paddingTop: 14,
-    paddingBottom: 20,
+    width: '100%',
+    paddingTop: 45,
+    paddingBottom: 30,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   logoCard: {
     backgroundColor: '#FFF',
-    borderRadius: 8,
-    paddingHorizontal: 22,
-    paddingVertical: 10,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     alignItems: 'center',
-    elevation: 3,
+    justifyContent: 'center',
+    elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    width: '48%',
+    height: 60,
   },
-  logoText: {
-    fontSize: 26,
-    fontWeight: '700',
-    lineHeight: 32,
-  },
-  tagline: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#333',
-    letterSpacing: 1,
-    marginTop: 1,
+  logoImage: {
+    width: '100%',
+    height: '100%',
   },
   sheet: {
     flex: 1,
-    backgroundColor: '#FFF',
+    backgroundColor: '#EDF5FD', // Soft blue background color matching Screenshot 1
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     overflow: 'hidden',
     borderWidth: 1.5,
     borderColor: '#EAF1FB',
     borderBottomWidth: 0,
+    marginTop: -18,
   },
   sheetTitleRow: {
     paddingHorizontal: 24,
@@ -206,7 +191,7 @@ const s = StyleSheet.create({
     backgroundColor: '#FFF',
     borderRadius: 16,
     marginBottom: 16,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#E2E8F0',
     overflow: 'hidden',
     elevation: 1,
@@ -215,34 +200,21 @@ const s = StyleSheet.create({
     shadowOpacity: 0.02,
     shadowRadius: 4,
   },
-  faqCardActive: {
-    borderColor: '#A2C2E7',
-    borderWidth: 2,
-  },
   faqQuestionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 18,
+    paddingTop: 18,
     paddingHorizontal: 18,
+    paddingBottom: 6,
   },
   faqQuestionText: {
-    fontSize: 16,
+    fontSize: 16.5,
     fontWeight: 'bold',
     color: '#1A4FA0',
-    flex: 1,
-    marginRight: 10,
     lineHeight: 22,
-  },
-  faqQuestionTextActive: {
-    color: '#1A4FA0',
   },
   faqAnswerContainer: {
     paddingHorizontal: 18,
     paddingBottom: 18,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    paddingTop: 12,
+    paddingTop: 4,
   },
   faqAnswerText: {
     fontSize: 14,
