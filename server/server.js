@@ -328,8 +328,266 @@ app.post('/api/actions/log', async (req, res) => {
   }
 });
 
+// --- NEW BOOKING ENDPOINTS ---
+
+// 1. Create Booking (Passenger)
+app.post('/api/bookings', async (req, res) => {
+  const { passenger_id, start_lat, start_lng, end_lat, end_lng, distance_km, pickup_name, destination_name, fare } = req.body;
+
+  if (!passenger_id || !start_lat || !start_lng) {
+    return res.status(400).json({ message: 'Missing required booking fields (passenger_id, start_lat, start_lng).' });
+  }
+
+  try {
+    const routePath = `${pickup_name || 'Pickup'} -> ${destination_name || 'Destination'}`;
+    const sql = `
+      INSERT INTO routes (status_id, passenger_id, start_lat, start_lng, end_lat, end_lng, distance_km, route_path, created_at, updated_at)
+      VALUES (6, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `;
+    const [result] = await pool.query(sql, [passenger_id, start_lat, start_lng, end_lat || null, end_lng || null, distance_km || null, routePath]);
+    
+    // Log action
+    await pool.query(
+      `INSERT INTO action_history (user_id, role, action, details, created_at) VALUES (?, 'passenger', 'Create Booking', ?, NOW())`,
+      [passenger_id, `Created booking route ID ${result.insertId} from ${pickup_name} to ${destination_name} (Fare: PHP ${fare})`]
+    );
+
+    res.status(201).json({ bookingId: result.insertId, status_id: 6, message: 'Booking created successfully!' });
+  } catch (err) {
+    console.error('Error creating booking:', err);
+    res.status(500).json({ message: 'Failed to create booking.', error: err.message });
+  }
+});
+
+// 2. Fetch Pending/Unassigned Bookings (Driver)
+app.get('/api/bookings/pending', async (req, res) => {
+  try {
+    const sql = `
+      SELECT r.*, u.name as passenger_name
+      FROM routes r
+      JOIN users u ON r.passenger_id = u.id
+      WHERE r.status_id = 6 AND r.driver_id IS NULL
+      ORDER BY r.created_at DESC
+    `;
+    const [rows] = await pool.query(sql);
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching pending bookings:', err);
+    res.status(500).json({ message: 'Failed to fetch pending bookings.', error: err.message });
+  }
+});
+
+// 3. Get Booking Details and Status (Passenger and Driver polling)
+app.get('/api/bookings/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const sql = `
+      SELECT 
+        r.*, 
+        s.name as status_name,
+        u_pass.name as passenger_name,
+        u_pass.phone as passenger_phone,
+        u_driver.name as driver_name,
+        u_driver.phone as driver_phone,
+        v.plate_number as vehicle_plate,
+        v.brand as vehicle_brand,
+        v.model as vehicle_model
+      FROM routes r
+      LEFT JOIN statuses s ON r.status_id = s.id
+      LEFT JOIN users u_pass ON r.passenger_id = u_pass.id
+      LEFT JOIN users u_driver ON r.driver_id = u_driver.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      WHERE r.id = ?
+    `;
+    const [rows] = await pool.query(sql, [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Booking not found.' });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error fetching booking details:', err);
+    res.status(500).json({ message: 'Failed to fetch booking details.', error: err.message });
+  }
+});
+
+// 4. Accept Booking (Driver)
+app.post('/api/bookings/:id/accept', async (req, res) => {
+  const { id } = req.params;
+  const { driver_id } = req.body;
+
+  if (!driver_id) {
+    return res.status(400).json({ message: 'Driver ID is required to accept booking.' });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Verify booking is still pending
+    const [booking] = await conn.query('SELECT status_id FROM routes WHERE id = ? FOR UPDATE', [id]);
+    if (booking.length === 0) {
+      conn.release();
+      return res.status(404).json({ message: 'Booking not found.' });
+    }
+    if (booking[0].status_id !== 6) {
+      conn.release();
+      return res.status(400).json({ message: 'Booking is no longer pending or has been accepted by another driver.' });
+    }
+
+    // Lookup driver vehicle
+    const [vehicle] = await conn.query('SELECT id FROM vehicles WHERE driver_id = ? LIMIT 1', [driver_id]);
+    const vehicleId = vehicle[0] ? vehicle[0].id : null;
+
+    // Update status to 11 (to_pick_up), assign driver and vehicle
+    const sql = `
+      UPDATE routes 
+      SET driver_id = ?, vehicle_id = ?, status_id = 11, updated_at = NOW() 
+      WHERE id = ?
+    `;
+    await conn.query(sql, [driver_id, vehicleId, id]);
+
+    // Log action
+    await conn.query(
+      `INSERT INTO action_history (user_id, role, action, details, created_at) VALUES (?, 'driver', 'Accept Booking', ?, NOW())`,
+      [driver_id, `Accepted booking route ID ${id} with vehicle ID ${vehicleId}`]
+    );
+
+    await conn.commit();
+    res.json({ message: 'Booking accepted successfully!', status_id: 11 });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Error accepting booking:', err);
+    res.status(500).json({ message: 'Failed to accept booking.', error: err.message });
+  } finally {
+    conn.release();
+  }
+});
+
+// 5. Driver Arrived at Pickup
+app.post('/api/bookings/:id/arrive', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const sql = `
+      UPDATE routes 
+      SET status_id = 12, updated_at = NOW() 
+      WHERE id = ? AND status_id = 11
+    `;
+    const [result] = await pool.query(sql, [id]);
+    if (result.affectedRows === 0) {
+      return res.status(400).json({ message: 'Booking cannot be marked as arrived (invalid status).' });
+    }
+    res.json({ message: 'Driver marked as arrived at pickup.', status_id: 12 });
+  } catch (err) {
+    console.error('Error marking arrival:', err);
+    res.status(500).json({ message: 'Failed to mark arrival.', error: err.message });
+  }
+});
+
+// 6. Start Trip
+app.post('/api/bookings/:id/start', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const sql = `
+      UPDATE routes 
+      SET status_id = 13, start_trip = NOW(), updated_at = NOW() 
+      WHERE id = ? AND status_id = 12
+    `;
+    const [result] = await pool.query(sql, [id]);
+    if (result.affectedRows === 0) {
+      return res.status(400).json({ message: 'Trip cannot be started (invalid status).' });
+    }
+    res.json({ message: 'Trip started successfully.', status_id: 13 });
+  } catch (err) {
+    console.error('Error starting trip:', err);
+    res.status(500).json({ message: 'Failed to start trip.', error: err.message });
+  }
+});
+
+// 7. End/Complete Trip (Generates Revenue & Breakdowns)
+app.post('/api/bookings/:id/end', async (req, res) => {
+  const { id } = req.params;
+  const { fare } = req.body; // Fare calculated by distance
+
+  if (!fare) {
+    return res.status(400).json({ message: 'Fare is required to complete trip.' });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Fetch booking details
+    const [booking] = await conn.query('SELECT driver_id, status_id FROM routes WHERE id = ? FOR UPDATE', [id]);
+    if (booking.length === 0) {
+      conn.release();
+      return res.status(404).json({ message: 'Booking not found.' });
+    }
+    if (booking[0].status_id !== 13) {
+      conn.release();
+      return res.status(400).json({ message: 'Trip is not in progress and cannot be completed.' });
+    }
+
+    const driverId = booking[0].driver_id;
+
+    // A. Create Invoice entry in revenues
+    const invoiceNo = `INV-${Date.now()}`;
+    const revenueSql = `
+      INSERT INTO revenues (status_id, driver_id, invoice_no, amount, currency, service_type, payment_date, notes, created_at, updated_at)
+      VALUES (8, ?, ?, ?, 'PHP', 'Trips', NOW(), ?, NOW(), NOW())
+    `;
+    const [revenueResult] = await conn.query(revenueSql, [driverId, invoiceNo, fare, `Payment for ride booking #${id}`]);
+    const revenueId = revenueResult.insertId;
+
+    // B. Calculate & Create Revenue Breakdowns
+    // percentage_types: 1=tax (1%), 2=bank (1%), 3=markup_fee (10 PHP flat), 4=system_fee (10 PHP flat)
+    const taxEarning = parseFloat((fare * 0.01).toFixed(2));
+    const bankEarning = parseFloat((fare * 0.01).toFixed(2));
+    const markupEarning = 10.00;
+    const systemEarning = 10.00;
+
+    const breakdownSql = `
+      INSERT INTO revenue_breakdowns (revenue_id, percentage_type_id, total_earning, created_at, updated_at)
+      VALUES 
+        (?, 1, ?, NOW(), NOW()),
+        (?, 2, ?, NOW(), NOW()),
+        (?, 3, ?, NOW(), NOW()),
+        (?, 4, ?, NOW(), NOW())
+    `;
+    await conn.query(breakdownSql, [
+      revenueId, taxEarning,
+      revenueId, bankEarning,
+      revenueId, markupEarning,
+      revenueId, systemEarning
+    ]);
+
+    // C. Update routes with revenue_id, status_id = 16 (completed), and end_trip = NOW()
+    const routeUpdateSql = `
+      UPDATE routes 
+      SET status_id = 16, revenue_id = ?, end_trip = NOW(), updated_at = NOW() 
+      WHERE id = ?
+    `;
+    await conn.query(routeUpdateSql, [revenueId, id]);
+
+    // D. Log Action
+    await conn.query(
+      `INSERT INTO action_history (user_id, role, action, details, created_at) VALUES (?, 'driver', 'Complete Trip', ?, NOW())`,
+      [driverId, `Completed trip route ID ${id}. Revenue ID ${revenueId} created. Fare: PHP ${fare}`]
+    );
+
+    await conn.commit();
+    res.json({ message: 'Trip completed successfully! Transaction logged.', status_id: 16, revenueId });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Error completing trip:', err);
+    res.status(500).json({ message: 'Failed to complete trip.', error: err.message });
+  } finally {
+    conn.release();
+  }
+});
+
 // Start Server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+

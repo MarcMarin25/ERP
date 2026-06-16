@@ -228,6 +228,184 @@ export async function logActionToDb(action: string, details?: string): Promise<v
 }
 
 /**
+ * --- NEW BOOKING DATABASE WRAPPERS ---
+ */
+
+export interface BookingRequest {
+  passenger_id: number;
+  start_lat: number;
+  start_lng: number;
+  end_lat: number;
+  end_lng: number;
+  distance_km: number;
+  pickup_name: string;
+  destination_name: string;
+  fare: number;
+}
+
+export interface BookingResponse {
+  bookingId: number;
+  status_id: number;
+  message: string;
+}
+
+export interface BookingDetails {
+  id: number;
+  status_id: number;
+  status_name: string;
+  driver_id: number | null;
+  vehicle_id: number | null;
+  passenger_id: number;
+  start_trip: string | null;
+  end_trip: string | null;
+  start_lat: string;
+  start_lng: string;
+  end_lat: string | null;
+  end_lng: string | null;
+  distance_km: string | null;
+  route_path: string | null;
+  passenger_name: string;
+  passenger_phone: string;
+  driver_name: string | null;
+  driver_phone: string | null;
+  vehicle_plate: string | null;
+  vehicle_brand: string | null;
+  vehicle_model: string | null;
+}
+
+/**
+ * Creates a new booking in the MySQL database (routes table)
+ */
+export async function createBooking(booking: BookingRequest): Promise<BookingResponse> {
+  const res = await safeFetch(`${BASE_URL}/api/bookings`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Bypass-Tunnel-Reminder': 'true'
+    },
+    body: JSON.stringify(booking)
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to create booking.');
+  }
+  return data;
+}
+
+/**
+ * Fetches all unassigned pending bookings for driver notification
+ */
+export async function fetchPendingBookings(): Promise<BookingDetails[]> {
+  const res = await safeFetch(`${BASE_URL}/api/bookings/pending`, {
+    method: 'GET',
+    headers: {
+      'Bypass-Tunnel-Reminder': 'true'
+    }
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to fetch pending bookings.');
+  }
+  return data;
+}
+
+/**
+ * Fetches booking details and status from the database
+ */
+export async function fetchBookingStatus(bookingId: number | string): Promise<BookingDetails> {
+  const res = await safeFetch(`${BASE_URL}/api/bookings/${bookingId}`, {
+    method: 'GET',
+    headers: {
+      'Bypass-Tunnel-Reminder': 'true'
+    }
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to fetch booking details.');
+  }
+  return data;
+}
+
+/**
+ * Driver accepts the booking
+ */
+export async function acceptBooking(bookingId: number | string, driverId: number): Promise<{ message: string; status_id: number }> {
+  const res = await safeFetch(`${BASE_URL}/api/bookings/${bookingId}/accept`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Bypass-Tunnel-Reminder': 'true'
+    },
+    body: JSON.stringify({ driver_id: driverId })
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to accept booking.');
+  }
+  return data;
+}
+
+/**
+ * Driver marks as arrived at passenger's pickup location
+ */
+export async function updateBookingArrived(bookingId: number | string): Promise<{ message: string; status_id: number }> {
+  const res = await safeFetch(`${BASE_URL}/api/bookings/${bookingId}/arrive`, {
+    method: 'POST',
+    headers: {
+      'Bypass-Tunnel-Reminder': 'true'
+    }
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to mark arrival.');
+  }
+  return data;
+}
+
+/**
+ * Driver starts the trip
+ */
+export async function startBookingTrip(bookingId: number | string): Promise<{ message: string; status_id: number }> {
+  const res = await safeFetch(`${BASE_URL}/api/bookings/${bookingId}/start`, {
+    method: 'POST',
+    headers: {
+      'Bypass-Tunnel-Reminder': 'true'
+    }
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to start trip.');
+  }
+  return data;
+}
+
+/**
+ * Driver completes the trip (generates invoice/revenue entry)
+ */
+export async function endBookingTrip(bookingId: number | string, fare: number): Promise<{ message: string; status_id: number }> {
+  const res = await safeFetch(`${BASE_URL}/api/bookings/${bookingId}/end`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Bypass-Tunnel-Reminder': 'true'
+    },
+    body: JSON.stringify({ fare })
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to complete trip.');
+  }
+  return data;
+}
+
+/**
  * Keep the logged in user session cached locally on the device (Local Persistence)
  */
 export async function getCurrentSession(): Promise<UserSession | null> {
@@ -255,3 +433,4 @@ export async function clearCurrentSession(): Promise<void> {
     console.error('Error clearing session:', error);
   }
 }
+

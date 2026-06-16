@@ -17,14 +17,22 @@ import {
 } from 'react-native';
 import RippleButton from '../../components/RippleButton';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
-import { usePassengerData } from '../_layout';
+import { usePassengerData, useAuth } from '../_layout';
 import GoogleMap from '../../components/GoogleMap';
 import { getSuggestions, geocode, getDirections, PlaceSuggestion } from '../../utils/googleMapsService';
 import { Swal } from '../../components/Swal';
-import { logActionToDb } from '../../utils/mockDb';
+import { logActionToDb, createBooking, fetchBookingStatus } from '../../utils/mockDb';
 
 export default function HomeScreen() {
   const { setTrips } = usePassengerData();
+  const { userSession } = useAuth();
+
+  // Live booking DB state variables
+  const [activeBookingId, setActiveBookingId] = useState<number | null>(null);
+  const [bookingStatus, setBookingStatus] = useState<number>(6); // 6: pending, 11: to_pick_up, 12: confirm_pick_up, 13: start_trip, 16: completed, 9: cancelled
+  const [driverInfo, setDriverInfo] = useState<{ name: string; phone: string; plate: string; vehicle: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>('Finding a driver...');
+
   const [showPopup, setShowPopup] = useState(false);
   const [pickup, setPickup] = useState('Current Location (Candaba, Pampanga)');
   const [destination, setDestination] = useState('');
@@ -139,41 +147,125 @@ export default function HomeScreen() {
     setIsCalculating(false);
   };
 
-  const handleBookRide = () => {
+  // Poll active booking status
+  useEffect(() => {
+    if (activeBookingId === null) return;
+
+    let isMounted = true;
+    const pollInterval = setInterval(async () => {
+      try {
+        const details = await fetchBookingStatus(activeBookingId);
+        if (!isMounted) return;
+
+        setBookingStatus(details.status_id);
+
+        if (details.status_id === 11) {
+          setStatusMessage(`Driver ${details.driver_name || 'Partner'} accepted your request! Heading to pickup...`);
+          setDriverInfo({
+            name: details.driver_name || 'Driver',
+            phone: details.driver_phone || '',
+            plate: details.vehicle_plate || 'N/A',
+            vehicle: details.vehicle_brand && details.vehicle_model 
+              ? `${details.vehicle_brand} ${details.vehicle_model}` 
+              : 'Toyota Vios'
+          });
+        } else if (details.status_id === 12) {
+          setStatusMessage('Driver has arrived at your pickup location!');
+        } else if (details.status_id === 13) {
+          setStatusMessage('Trip started! Heading to your destination...');
+        } else if (details.status_id === 16) {
+          setStatusMessage('Trip completed successfully!');
+          clearInterval(pollInterval);
+          
+          // Add trip to list
+          const newTrip = {
+            id: String(activeBookingId),
+            date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            pickup: pickup,
+            destination: destination,
+            price: fare,
+            status: 'Completed' as const,
+            driverName: details.driver_name || 'Driver',
+            distance: `${distance} km`,
+            duration: `${duration} mins`
+          };
+          setTrips(prev => [newTrip, ...prev]);
+
+          // Transition to success screen
+          setBookingSuccess(true);
+          
+          setTimeout(() => {
+            if (isMounted) {
+              setBookingSuccess(false);
+              setShowPopup(false);
+              setDestination('');
+              setDestinationCoords(null);
+              setRouteCoords([]);
+              setActiveBookingId(null);
+              setDriverInfo(null);
+              setBookingStatus(6);
+              setStatusMessage('Finding a driver...');
+            }
+          }, 4000);
+        } else if (details.status_id === 9 || details.status_id === 18) {
+          clearInterval(pollInterval);
+          setActiveBookingId(null);
+          setDriverInfo(null);
+          setBookingStatus(6);
+          setStatusMessage('Finding a driver...');
+          Swal.fire({
+            title: 'Booking Cancelled',
+            text: 'Your request was cancelled or declined. Please try booking again.',
+            icon: 'error'
+          });
+        }
+      } catch (err) {
+        console.error('Error polling booking status:', err);
+      }
+    }, 2500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+    };
+  }, [activeBookingId, pickup, destination, fare, distance, duration]);
+
+  const handleBookRide = async () => {
     if (!destination.trim()) {
       Swal.fire({ title: 'Destination Required', text: 'Please enter a destination location.', icon: 'warning' });
       return;
     }
 
+    const passengerId = userSession?.id;
+    if (!passengerId) {
+      Swal.fire({ title: 'Login Required', text: 'Please login to book a ride.', icon: 'error' });
+      return;
+    }
+
     setIsBooking(true);
-
-    setTimeout(() => {
-      setIsBooking(false);
-      setBookingSuccess(true);
-
-      const newTrip = {
-        id: String(Date.now()),
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        pickup: pickup,
-        destination: destination,
-        price: fare,
-        status: 'Completed' as const,
+    try {
+      const bookingData = {
+        passenger_id: passengerId,
+        start_lat: pickupCoords?.latitude || 15.08,
+        start_lng: pickupCoords?.longitude || 120.82,
+        end_lat: destinationCoords?.latitude || 15.08,
+        end_lng: destinationCoords?.longitude || 120.82,
+        distance_km: distance,
+        pickup_name: pickup,
+        destination_name: destination,
+        fare: fare
       };
 
-      setTrips(prev => [newTrip, ...prev]);
-
-      // Log book ride action to phpMyAdmin database
-      logActionToDb('Book Ride', `Booked ride from ${pickup} to ${destination}. Fare: ₱${fare.toFixed(2)}`);
-
-      setTimeout(() => {
-        setBookingSuccess(false);
-        setShowPopup(false);
-        setDestination('');
-        setDestinationCoords(null);
-        setRouteCoords([]);
-      }, 2500);
-    }, 2000);
+      const response = await createBooking(bookingData);
+      setActiveBookingId(response.bookingId);
+      setBookingStatus(6);
+      setStatusMessage('Finding a driver...');
+    } catch (err: any) {
+      Swal.fire({ title: 'Booking Failed', text: err.message, icon: 'error' });
+    } finally {
+      setIsBooking(false);
+    }
   };
 
   return (
@@ -347,6 +439,43 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* ── Live Booking Status Overlay Modal ── */}
+      <Modal visible={activeBookingId !== null && !bookingSuccess} transparent animationType="slide">
+        <View style={s.successOverlay}>
+          <View style={s.successCard}>
+            <View style={[s.successIconBg, { backgroundColor: bookingStatus === 6 ? '#1A4FA0' : '#22B04B' }]}>
+              {bookingStatus === 6 ? (
+                <ActivityIndicator size="large" color="#FFF" />
+              ) : (
+                <Ionicons name="car-sport" size={42} color="#FFF" />
+              )}
+            </View>
+            <Text style={s.successTitle}>
+              {bookingStatus === 6 ? 'Request Sent' : 'Trip Progress'}
+            </Text>
+            <Text style={[s.successSubtitle, { fontSize: 15, fontWeight: '600', color: '#1A4FA0', marginVertical: 10, textAlign: 'center' }]}>
+              {statusMessage}
+            </Text>
+
+            {driverInfo && (
+              <View style={[s.receiptCard, { marginTop: 10 }]}>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1A4FA0', marginBottom: 5 }}>Driver Information</Text>
+                <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Driver:</Text> {driverInfo.name}</Text>
+                <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Contact:</Text> {driverInfo.phone}</Text>
+                <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Vehicle:</Text> {driverInfo.vehicle}</Text>
+                <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Plate:</Text> {driverInfo.plate}</Text>
+              </View>
+            )}
+
+            <View style={[s.receiptCard, { marginTop: 10 }]}>
+              <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Pickup:</Text> {pickup}</Text>
+              <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>To:</Text> {destination}</Text>
+              <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Total Cost:</Text> ₱{fare.toFixed(2)}</Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Booking Success Overlay Modal ── */}
       <Modal visible={bookingSuccess} transparent animationType="fade">
         <View style={s.successOverlay}>
@@ -355,10 +484,11 @@ export default function HomeScreen() {
               <Ionicons name="checkmark-circle" size={54} color="#FFF" />
             </View>
             <Text style={s.successTitle}>Booking Confirmed!</Text>
-            <Text style={s.successSubtitle}>Your driver is on the way to pick you up.</Text>
+            <Text style={s.successSubtitle}>Your trip has been completed successfully.</Text>
             <View style={s.receiptCard}>
               <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Pickup:</Text> {pickup}</Text>
               <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>To:</Text> {destination}</Text>
+              {driverInfo && <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Driver:</Text> {driverInfo.name}</Text>}
               <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Total Cost:</Text> ₱{fare.toFixed(2)}</Text>
             </View>
           </View>
