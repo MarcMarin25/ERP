@@ -1,6 +1,9 @@
 /**
- * Fully functional passenger Home / Map screen.
- * Integrates real-time Google Maps search, autocomplete, and routing.
+ * Passenger Home / Map screen.
+ * – Tap the map to pin pickup/destination
+ * – Real Google Directions API for distance, duration, fare
+ * – All bookings recorded to phpMyAdmin (routes table)
+ * – Swal notifications for every booking state
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -23,70 +26,86 @@ import { getSuggestions, geocode, getDirections, PlaceSuggestion } from '../../u
 import { Swal } from '../../components/Swal';
 import { logActionToDb, createBooking, fetchBookingStatus } from '../../utils/mockDb';
 
+// ── Fare constants ────────────────────────────────────────────────────────────
+const BASE_FARE    = 40;   // PHP
+const PER_KM_RATE  = 15;   // PHP per km
+
+function calcFare(distanceKm: number): number {
+  return Math.round(BASE_FARE + distanceKm * PER_KM_RATE);
+}
+
+// ── Booking status IDs ────────────────────────────────────────────────────────
+const STATUS = {
+  PENDING:    6,   // waiting for driver
+  TO_PICKUP:  11,  // driver accepted, heading to pickup
+  ARRIVED:    12,  // driver arrived at pickup
+  IN_TRIP:    13,  // trip started
+  COMPLETED:  16,  // trip completed
+  CANCELLED:  9,
+  REJECTED:   18,
+};
+
 export default function HomeScreen() {
   const { setTrips } = usePassengerData();
   const { userSession } = useAuth();
 
-  // Live booking DB state variables
-  const [activeBookingId, setActiveBookingId] = useState<number | null>(null);
-  const [bookingStatus, setBookingStatus] = useState<number>(6); // 6: pending, 11: to_pick_up, 12: confirm_pick_up, 13: start_trip, 16: completed, 9: cancelled
-  const [driverInfo, setDriverInfo] = useState<{ name: string; phone: string; plate: string; vehicle: string } | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string>('Finding a driver...');
+  // ── Map & location state ──────────────────────────────────────────────────
+  const [pickupCoords,      setPickupCoords]      = useState<{ latitude: number; longitude: number } | null>(null);
+  const [destinationCoords, setDestinationCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [routeCoords,       setRouteCoords]       = useState<{ latitude: number; longitude: number }[]>([]);
+  const [pinMode,           setPinMode]           = useState<'none' | 'pickup' | 'destination'>('none');
 
-  const [showPopup, setShowPopup] = useState(false);
-  const [pickup, setPickup] = useState('Current Location (Candaba, Pampanga)');
-  const [destination, setDestination] = useState('');
+  // ── Search / autocomplete state ───────────────────────────────────────────
+  const [pickup,       setPickup]       = useState('');
+  const [destination,  setDestination]  = useState('');
+  const [suggestions,  setSuggestions]  = useState<PlaceSuggestion[]>([]);
+  const [activeField,  setActiveField]  = useState<'pickup' | 'destination' | null>(null);
 
-  const [distance, setDistance] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [fare, setFare] = useState(0);
+  // ── Route calculation state ───────────────────────────────────────────────
+  const [distance,      setDistance]      = useState(0);
+  const [duration,      setDuration]      = useState(0);
+  const [fare,          setFare]          = useState(0);
   const [isCalculating, setIsCalculating] = useState(false);
 
-  const [isBooking, setIsBooking] = useState(false);
-  const [bookingSuccess, setBookingSuccess] = useState(false);
+  // ── Booking UI state ──────────────────────────────────────────────────────
+  const [showPopup,       setShowPopup]       = useState(false);
+  const [isBooking,       setIsBooking]       = useState(false);
+  const [bookingSuccess,  setBookingSuccess]  = useState(false);
 
-  // Google Maps state variables
-  const [pickupCoords, setPickupCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [destinationCoords, setDestinationCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
-  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
-  const [activeField, setActiveField] = useState<'pickup' | 'destination' | null>(null);
+  // ── Live booking tracking ─────────────────────────────────────────────────
+  const [activeBookingId, setActiveBookingId] = useState<number | null>(null);
+  const [bookingStatus,   setBookingStatus]   = useState<number>(STATUS.PENDING);
+  const [statusMessage,   setStatusMessage]   = useState('Finding a driver...');
+  const [driverInfo,      setDriverInfo]      = useState<{ name: string; phone: string; plate: string; vehicle: string } | null>(null);
 
-  // Geocode default pickup location on mount
+  const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyBFHqGzZOVs7b0cCdWuePt0t4kbsPiJ7Kc';
+
+  // ── Geocode default pickup on mount ──────────────────────────────────────
   useEffect(() => {
-    const geocodeDefaultPickup = async () => {
-      const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBFHqGzZOVs7b0cCdWuePt0t4kbsPiJ7Kc";
-      const coords = await geocode('Candaba, Pampanga', apiKey);
+    const defaultPickup = async () => {
+      const coords = await geocode('Candaba, Pampanga', GOOGLE_API_KEY);
       if (coords) {
         setPickupCoords(coords);
+        setPickup('Candaba, Pampanga');
       }
     };
-    geocodeDefaultPickup();
+    defaultPickup();
   }, []);
 
-  // Fetch Place Autocomplete suggestions when user types
+  // ── Autocomplete suggestions ──────────────────────────────────────────────
   useEffect(() => {
-    if (!activeField) {
-      setSuggestions([]);
-      return;
-    }
-
+    if (!activeField) { setSuggestions([]); return; }
     const query = activeField === 'pickup' ? pickup : destination;
-    if (!query || query.trim().length < 3) {
-      setSuggestions([]);
-      return;
-    }
+    if (!query || query.trim().length < 3) { setSuggestions([]); return; }
 
-    const delayDebounceFn = setTimeout(async () => {
-      const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBFHqGzZOVs7b0cCdWuePt0t4kbsPiJ7Kc";
-      const results = await getSuggestions(query, apiKey);
+    const timer = setTimeout(async () => {
+      const results = await getSuggestions(query, GOOGLE_API_KEY);
       setSuggestions(results);
     }, 400);
-
-    return () => clearTimeout(delayDebounceFn);
+    return () => clearTimeout(timer);
   }, [pickup, destination, activeField]);
 
-  // Fetch routes and calculate distance, duration, and fare when pickup/destination change
+  // ── Fetch route when both coords are set ─────────────────────────────────
   useEffect(() => {
     if (!pickupCoords || !destinationCoords) {
       setRouteCoords([]);
@@ -98,105 +117,130 @@ export default function HomeScreen() {
 
     const fetchRoute = async () => {
       setIsCalculating(true);
-      const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBFHqGzZOVs7b0cCdWuePt0t4kbsPiJ7Kc";
-      const routeInfo = await getDirections(pickupCoords, destinationCoords, apiKey);
+      const routeInfo = await getDirections(pickupCoords, destinationCoords, GOOGLE_API_KEY);
 
       if (routeInfo) {
+        const km = parseFloat(routeInfo.distanceKm.toFixed(1));
         setRouteCoords(routeInfo.polylinePoints);
-        setDistance(parseFloat(routeInfo.distanceKm.toFixed(1)));
+        setDistance(km);
         setDuration(routeInfo.durationMin);
-        setFare(Math.round(40 + (routeInfo.distanceKm * 15)));
+        setFare(calcFare(km));
       } else {
-        // Fallback to length-based mock calculations if api fails
-        const length = destination.trim().length;
-        const computedDistance = Math.min(25, Math.max(1.8, (length * 0.6) + 1.2));
-        const computedDuration = Math.round(computedDistance * 2.2 + 3);
-        const computedFare = Math.round(40 + (computedDistance * 15));
-
-        setDistance(parseFloat(computedDistance.toFixed(1)));
-        setDuration(computedDuration);
-        setFare(computedFare);
+        // Fallback: straight-line approximation
+        const R = 6371;
+        const dLat = ((destinationCoords.latitude  - pickupCoords.latitude)  * Math.PI) / 180;
+        const dLon = ((destinationCoords.longitude - pickupCoords.longitude) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos((pickupCoords.latitude * Math.PI) / 180) *
+          Math.cos((destinationCoords.latitude * Math.PI) / 180) *
+          Math.sin(dLon / 2) ** 2;
+        const km = parseFloat((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1));
+        const mins = Math.round(km * 2.5 + 3);
+        setDistance(km);
+        setDuration(mins);
+        setFare(calcFare(km));
       }
       setIsCalculating(false);
     };
 
     fetchRoute();
-  }, [pickupCoords, destinationCoords, destination]);
+  }, [pickupCoords, destinationCoords]);
 
+  // ── Handle autocomplete selection ─────────────────────────────────────────
   const handleSelectSuggestion = async (item: PlaceSuggestion, field: 'pickup' | 'destination') => {
     setIsCalculating(true);
-    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBFHqGzZOVs7b0cCdWuePt0t4kbsPiJ7Kc";
-    
+    setSuggestions([]);
+    setActiveField(null);
+
+    const coords = await geocode(item.description, GOOGLE_API_KEY);
     if (field === 'pickup') {
       setPickup(item.description);
-      setSuggestions([]);
-      setActiveField(null);
-      const coords = await geocode(item.description, apiKey);
-      if (coords) {
-        setPickupCoords(coords);
-      }
+      if (coords) setPickupCoords(coords);
     } else {
       setDestination(item.description);
-      setSuggestions([]);
-      setActiveField(null);
-      const coords = await geocode(item.description, apiKey);
-      if (coords) {
-        setDestinationCoords(coords);
-      }
+      if (coords) setDestinationCoords(coords);
     }
     setIsCalculating(false);
   };
 
-  // Poll active booking status
+  // ── Handle map tap for pinning ────────────────────────────────────────────
+  const handleMapPress = async (coords: { latitude: number; longitude: number }) => {
+    if (pinMode === 'none') return;
+
+    setIsCalculating(true);
+
+    // Reverse geocode the tapped coords to get a human-readable name
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${coords.latitude},${coords.longitude}&key=${GOOGLE_API_KEY}`;
+    let placeName = `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`;
+    try {
+      const res  = await fetch(url, { headers: { 'Bypass-Tunnel-Reminder': 'true' } });
+      const json = await res.json();
+      if (json.status === 'OK' && json.results && json.results[0]) {
+        placeName = json.results[0].formatted_address;
+      }
+    } catch (_) {}
+
+    if (pinMode === 'pickup') {
+      setPickupCoords(coords);
+      setPickup(placeName);
+      setPinMode('none');
+    } else {
+      setDestinationCoords(coords);
+      setDestination(placeName);
+      setPinMode('none');
+    }
+
+    setIsCalculating(false);
+  };
+
+  // ── Poll booking status ───────────────────────────────────────────────────
   useEffect(() => {
     if (activeBookingId === null) return;
 
-    let isMounted = true;
-    const pollInterval = setInterval(async () => {
+    let mounted = true;
+    const interval = setInterval(async () => {
       try {
         const details = await fetchBookingStatus(activeBookingId);
-        if (!isMounted) return;
+        if (!mounted) return;
 
         setBookingStatus(details.status_id);
 
-        if (details.status_id === 11) {
-          setStatusMessage(`Driver ${details.driver_name || 'Partner'} accepted your request! Heading to pickup...`);
+        if (details.status_id === STATUS.TO_PICKUP) {
+          setStatusMessage(`Driver ${details.driver_name || 'Partner'} accepted! Heading to pickup...`);
           setDriverInfo({
-            name: details.driver_name || 'Driver',
-            phone: details.driver_phone || '',
-            plate: details.vehicle_plate || 'N/A',
-            vehicle: details.vehicle_brand && details.vehicle_model 
-              ? `${details.vehicle_brand} ${details.vehicle_model}` 
-              : 'Toyota Vios'
+            name:    details.driver_name    || 'Driver',
+            phone:   details.driver_phone   || '',
+            plate:   details.vehicle_plate  || 'N/A',
+            vehicle: details.vehicle_brand && details.vehicle_model
+              ? `${details.vehicle_brand} ${details.vehicle_model}`
+              : 'Vehicle',
           });
-        } else if (details.status_id === 12) {
+        } else if (details.status_id === STATUS.ARRIVED) {
           setStatusMessage('Driver has arrived at your pickup location!');
-        } else if (details.status_id === 13) {
+        } else if (details.status_id === STATUS.IN_TRIP) {
           setStatusMessage('Trip started! Heading to your destination...');
-        } else if (details.status_id === 16) {
+        } else if (details.status_id === STATUS.COMPLETED) {
+          clearInterval(interval);
           setStatusMessage('Trip completed successfully!');
-          clearInterval(pollInterval);
-          
-          // Add trip to list
-          const newTrip = {
-            id: String(activeBookingId),
-            date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-            pickup: pickup,
-            destination: destination,
-            price: fare,
-            status: 'Completed' as const,
-            driverName: details.driver_name || 'Driver',
-            distance: `${distance} km`,
-            duration: `${duration} mins`
-          };
-          setTrips(prev => [newTrip, ...prev]);
 
-          // Transition to success screen
+          // Add to trip history
+          setTrips(prev => [{
+            id:          String(activeBookingId),
+            date:        new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            time:        new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            pickup:      pickup,
+            destination: destination,
+            price:       fare,
+            status:      'Completed' as const,
+            driverName:  details.driver_name || 'Driver',
+            distance:    `${distance} km`,
+            duration:    `${duration} mins`,
+          }, ...prev]);
+
           setBookingSuccess(true);
-          
           setTimeout(() => {
-            if (isMounted) {
+            if (mounted) {
               setBookingSuccess(false);
               setShowPopup(false);
               setDestination('');
@@ -204,107 +248,165 @@ export default function HomeScreen() {
               setRouteCoords([]);
               setActiveBookingId(null);
               setDriverInfo(null);
-              setBookingStatus(6);
+              setBookingStatus(STATUS.PENDING);
               setStatusMessage('Finding a driver...');
             }
-          }, 4000);
-        } else if (details.status_id === 9 || details.status_id === 18) {
-          clearInterval(pollInterval);
+          }, 5000);
+        } else if (details.status_id === STATUS.CANCELLED || details.status_id === STATUS.REJECTED) {
+          clearInterval(interval);
           setActiveBookingId(null);
           setDriverInfo(null);
-          setBookingStatus(6);
+          setBookingStatus(STATUS.PENDING);
           setStatusMessage('Finding a driver...');
-          Swal.fire({
-            title: 'Booking Cancelled',
-            text: 'Your request was cancelled or declined. Please try booking again.',
-            icon: 'error'
-          });
+          Swal.fire({ title: 'Booking Cancelled', text: 'Your booking was cancelled. Please try again.', icon: 'error' });
         }
       } catch (err) {
-        console.error('Error polling booking status:', err);
+        console.warn('Polling error:', err);
       }
     }, 2500);
 
-    return () => {
-      isMounted = false;
-      clearInterval(pollInterval);
-    };
+    return () => { mounted = false; clearInterval(interval); };
   }, [activeBookingId, pickup, destination, fare, distance, duration]);
 
+  // ── Book a ride ───────────────────────────────────────────────────────────
   const handleBookRide = async () => {
     if (!destination.trim()) {
-      Swal.fire({ title: 'Destination Required', text: 'Please enter a destination location.', icon: 'warning' });
+      Swal.fire({ title: 'Destination Required', text: 'Please enter or pin a destination on the map.', icon: 'warning' });
+      return;
+    }
+    if (!pickupCoords) {
+      Swal.fire({ title: 'Pickup Required', text: 'Please set a pickup location.', icon: 'warning' });
       return;
     }
 
     const passengerId = userSession?.id;
     if (!passengerId) {
-      Swal.fire({ title: 'Login Required', text: 'Please login to book a ride.', icon: 'error' });
+      Swal.fire({ title: 'Not Logged In', text: 'Please log in to book a ride.', icon: 'error' });
       return;
     }
 
     setIsBooking(true);
     try {
-      const bookingData = {
-        passenger_id: passengerId,
-        start_lat: pickupCoords?.latitude || 15.08,
-        start_lng: pickupCoords?.longitude || 120.82,
-        end_lat: destinationCoords?.latitude || 15.08,
-        end_lng: destinationCoords?.longitude || 120.82,
-        distance_km: distance,
-        pickup_name: pickup,
+      const response = await createBooking({
+        passenger_id:     passengerId,
+        start_lat:        pickupCoords.latitude,
+        start_lng:        pickupCoords.longitude,
+        end_lat:          destinationCoords?.latitude  ?? pickupCoords.latitude,
+        end_lng:          destinationCoords?.longitude ?? pickupCoords.longitude,
+        distance_km:      distance,
+        pickup_name:      pickup,
         destination_name: destination,
-        fare: fare
-      };
+        fare:             fare,
+      });
 
-      const response = await createBooking(bookingData);
       setActiveBookingId(response.bookingId);
-      setBookingStatus(6);
+      setBookingStatus(STATUS.PENDING);
       setStatusMessage('Finding a driver...');
+
+      // Log to action history
+      logActionToDb('Book Ride', `Booking #${response.bookingId} — ${pickup} → ${destination} | ${distance} km | ₱${fare}`);
+
+      await Swal.fire({
+        title: 'Booking Sent!',
+        text: `Looking for an available driver...\nRoute: ${pickup} → ${destination}\nDistance: ${distance} km | Fare: ₱${fare}`,
+        icon: 'success',
+        confirmButtonText: 'OK',
+      });
     } catch (err: any) {
-      Swal.fire({ title: 'Booking Failed', text: err.message, icon: 'error' });
+      Swal.fire({ title: 'Booking Failed', text: err.message || 'Failed to create booking. Please try again.', icon: 'error' });
     } finally {
       setIsBooking(false);
     }
   };
 
+  // ── Cancel booking ─────────────────────────────────────────────────────────
+  const handleCancelBooking = () => {
+    Swal.fire({
+      title: 'Cancel Booking?',
+      text: 'Are you sure you want to cancel your booking request?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Cancel',
+      cancelButtonText: 'Keep Waiting',
+    }).then((confirmed) => {
+      if (confirmed) {
+        setActiveBookingId(null);
+        setDriverInfo(null);
+        setBookingStatus(STATUS.PENDING);
+        setStatusMessage('Finding a driver...');
+        logActionToDb('Cancel Booking', `Cancelled booking while waiting for driver`);
+      }
+    });
+  };
+
   return (
     <View style={s.container}>
+
       {/* ── Google Map ── */}
-      <View style={s.webMapContainer}>
+      <View style={s.mapContainer}>
         <GoogleMap
           pickup={pickupCoords}
           destination={destinationCoords}
           route={routeCoords}
           interactive={true}
+          onMapPress={handleMapPress}
         />
+
+        {/* Pin mode banner */}
+        {pinMode !== 'none' && (
+          <View style={s.pinBanner}>
+            <Ionicons name="pin" size={18} color="#FFF" />
+            <Text style={s.pinBannerText}>
+              Tap map to set {pinMode === 'pickup' ? 'PICKUP' : 'DESTINATION'} pin
+            </Text>
+            <TouchableOpacity onPress={() => setPinMode('none')} style={s.pinBannerCancel}>
+              <Ionicons name="close-circle" size={20} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Map pin buttons overlay */}
+        {!showPopup && pinMode === 'none' && (
+          <View style={s.mapPinButtons}>
+            <TouchableOpacity
+              style={[s.mapPinBtn, { backgroundColor: '#22B04B' }]}
+              onPress={() => setPinMode('pickup')}
+            >
+              <Ionicons name="location" size={16} color="#FFF" />
+              <Text style={s.mapPinBtnText}>Pin Pickup</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.mapPinBtn, { backgroundColor: '#1A4FA0' }]}
+              onPress={() => setPinMode('destination')}
+            >
+              <FontAwesome name="flag" size={14} color="#FFF" />
+              <Text style={s.mapPinBtnText}>Pin Destination</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
-      {/* ── Floating Start Action Button ── */}
+      {/* ── Start Button ── */}
       {!showPopup && (
         <RippleButton
-          title="Start"
+          title="Book a Ride"
           style={s.startButton}
           textStyle={s.startButtonText}
           onPress={() => setShowPopup(true)}
         />
       )}
 
-      {/* ── Trip Planning Bottom Sheet / Popup ── */}
+      {/* ── Trip Planning Bottom Sheet ── */}
       <Modal
         visible={showPopup}
         transparent
         animationType="slide"
-        onRequestClose={() => {
-          if (!isBooking && !bookingSuccess) setShowPopup(false);
-        }}
+        onRequestClose={() => { if (!isBooking && !bookingSuccess) setShowPopup(false); }}
       >
         <TouchableOpacity
           style={s.modalOverlay}
           activeOpacity={1}
-          onPress={() => {
-            if (!isBooking && !bookingSuccess) setShowPopup(false);
-          }}
+          onPress={() => { if (!isBooking && !bookingSuccess) setShowPopup(false); }}
         >
           <TouchableOpacity activeOpacity={1} style={s.sheetContent}>
             <View style={s.dragBar} />
@@ -312,15 +414,15 @@ export default function HomeScreen() {
             <View style={s.sheetHeader}>
               <Text style={s.sheetTitle}>Plan Your Trip</Text>
               <Pressable
-                style={({ pressed }) => [s.closeButton, Platform.OS === 'ios' && pressed && { opacity: 0.7 }]}
+                style={s.closeButton}
                 onPress={() => setShowPopup(false)}
                 disabled={isBooking || bookingSuccess}
-                android_ripple={{ color: 'rgba(0, 0, 0, 0.1)', borderless: true, radius: 20 }}
               >
                 <Ionicons name="close" size={24} color="#777" />
               </Pressable>
             </View>
 
+            {/* ── Pickup input ── */}
             <View style={s.inputContainer}>
               <View style={s.inputWrapper}>
                 <View style={[s.inputIconBox, { backgroundColor: '#22B04B' }]}>
@@ -330,11 +432,17 @@ export default function HomeScreen() {
                   style={s.textInput}
                   placeholder="Pick up location"
                   value={pickup}
-                  onChangeText={setPickup}
+                  onChangeText={(t) => { setPickup(t); setActiveField('pickup'); }}
                   onFocus={() => setActiveField('pickup')}
                   placeholderTextColor="#999"
                   editable={!isBooking && !bookingSuccess}
                 />
+                <TouchableOpacity
+                  style={s.pinIconButton}
+                  onPress={() => { setShowPopup(false); setPinMode('pickup'); }}
+                >
+                  <Ionicons name="pin" size={20} color="#22B04B" />
+                </TouchableOpacity>
               </View>
 
               {activeField === 'pickup' && suggestions.length > 0 && (
@@ -353,25 +461,30 @@ export default function HomeScreen() {
               )}
 
               <View style={s.connectorDots}>
-                <View style={s.dot} />
-                <View style={s.dot} />
-                <View style={s.dot} />
+                <View style={s.dot} /><View style={s.dot} /><View style={s.dot} />
               </View>
 
+              {/* ── Destination input ── */}
               <View style={s.inputWrapper}>
                 <View style={[s.inputIconBox, { backgroundColor: '#1A4FA0' }]}>
                   <FontAwesome name="flag" size={14} color="#FFF" />
                 </View>
                 <TextInput
                   style={[s.textInput, { borderColor: '#1A4FA0' }]}
-                  placeholder="Enter destination location"
+                  placeholder="Enter destination"
                   value={destination}
-                  onChangeText={setDestination}
+                  onChangeText={(t) => { setDestination(t); setActiveField('destination'); }}
                   onFocus={() => setActiveField('destination')}
                   placeholderTextColor="#999"
                   autoFocus
                   editable={!isBooking && !bookingSuccess}
                 />
+                <TouchableOpacity
+                  style={s.pinIconButton}
+                  onPress={() => { setShowPopup(false); setPinMode('destination'); }}
+                >
+                  <Ionicons name="pin" size={20} color="#1A4FA0" />
+                </TouchableOpacity>
               </View>
 
               {activeField === 'destination' && suggestions.length > 0 && (
@@ -390,10 +503,14 @@ export default function HomeScreen() {
               )}
             </View>
 
+            {/* ── Fare estimate ── */}
             {destination.trim().length > 0 && (
               <View style={s.estimateContainer}>
                 {isCalculating ? (
-                  <ActivityIndicator size="small" color="#1A4FA0" style={{ paddingVertical: 10 }} />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <ActivityIndicator size="small" color="#1A4FA0" />
+                    <Text style={{ color: '#1A4FA0', fontWeight: '600' }}>Calculating route...</Text>
+                  </View>
                 ) : (
                   <>
                     <View style={s.summaryRow}>
@@ -411,7 +528,10 @@ export default function HomeScreen() {
                     </View>
 
                     <View style={s.fareDisplay}>
-                      <Text style={s.fareLabel}>Estimated Fare</Text>
+                      <View>
+                        <Text style={s.fareLabel}>Estimated Fare</Text>
+                        <Text style={s.fareBreakdown}>₱40 base + ₱15 × {distance} km</Text>
+                      </View>
                       <Text style={s.fareValue}>₱{fare.toFixed(2)}</Text>
                     </View>
                   </>
@@ -419,77 +539,132 @@ export default function HomeScreen() {
               </View>
             )}
 
+            {/* ── Book button ── */}
             <Pressable
-              style={({ pressed }) => [
+              style={[
                 s.bookButton,
-                (!destination.trim() || isCalculating) && { backgroundColor: '#A2C2E7' },
-                Platform.OS === 'ios' && pressed && { opacity: 0.85 },
+                (!destination.trim() || isCalculating || isBooking) && { backgroundColor: '#A2C2E7' },
               ]}
               disabled={!destination.trim() || isCalculating || isBooking || bookingSuccess}
               onPress={handleBookRide}
-              android_ripple={{ color: 'rgba(255, 255, 255, 0.25)', borderless: false }}
+              android_ripple={{ color: 'rgba(255, 255, 255, 0.25)' }}
             >
               {isBooking ? (
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
-                <Text style={s.bookButtonText}>Book Ride Now</Text>
+                <Text style={s.bookButtonText}>
+                  {distance > 0 ? `Book Ride — ₱${fare}` : 'Book Ride Now'}
+                </Text>
               )}
             </Pressable>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
-      {/* ── Live Booking Status Overlay Modal ── */}
+      {/* ── Live Booking Status Overlay ── */}
       <Modal visible={activeBookingId !== null && !bookingSuccess} transparent animationType="slide">
         <View style={s.successOverlay}>
           <View style={s.successCard}>
-            <View style={[s.successIconBg, { backgroundColor: bookingStatus === 6 ? '#1A4FA0' : '#22B04B' }]}>
-              {bookingStatus === 6 ? (
+            <View style={[s.successIconBg, { backgroundColor: bookingStatus === STATUS.PENDING ? '#1A4FA0' : '#22B04B' }]}>
+              {bookingStatus === STATUS.PENDING ? (
                 <ActivityIndicator size="large" color="#FFF" />
               ) : (
                 <Ionicons name="car-sport" size={42} color="#FFF" />
               )}
             </View>
+
             <Text style={s.successTitle}>
-              {bookingStatus === 6 ? 'Request Sent' : 'Trip Progress'}
-            </Text>
-            <Text style={[s.successSubtitle, { fontSize: 15, fontWeight: '600', color: '#1A4FA0', marginVertical: 10, textAlign: 'center' }]}>
-              {statusMessage}
+              {bookingStatus === STATUS.PENDING   ? 'Finding Driver...' :
+               bookingStatus === STATUS.TO_PICKUP ? 'Driver On The Way' :
+               bookingStatus === STATUS.ARRIVED   ? 'Driver Arrived!'  :
+               bookingStatus === STATUS.IN_TRIP   ? 'Trip In Progress' : 'Almost There!'}
             </Text>
 
+            <Text style={s.statusMsg}>{statusMessage}</Text>
+
             {driverInfo && (
-              <View style={[s.receiptCard, { marginTop: 10 }]}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1A4FA0', marginBottom: 5 }}>Driver Information</Text>
-                <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Driver:</Text> {driverInfo.name}</Text>
-                <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Contact:</Text> {driverInfo.phone}</Text>
-                <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Vehicle:</Text> {driverInfo.vehicle}</Text>
-                <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Plate:</Text> {driverInfo.plate}</Text>
+              <View style={s.receiptCard}>
+                <Text style={s.receiptSectionTitle}>Driver Information</Text>
+                <View style={s.receiptRow}>
+                  <Text style={s.receiptLabel}>Driver:</Text>
+                  <Text style={s.receiptVal}>{driverInfo.name}</Text>
+                </View>
+                <View style={s.receiptRow}>
+                  <Text style={s.receiptLabel}>Contact:</Text>
+                  <Text style={s.receiptVal}>{driverInfo.phone}</Text>
+                </View>
+                <View style={s.receiptRow}>
+                  <Text style={s.receiptLabel}>Vehicle:</Text>
+                  <Text style={s.receiptVal}>{driverInfo.vehicle}</Text>
+                </View>
+                <View style={s.receiptRow}>
+                  <Text style={s.receiptLabel}>Plate:</Text>
+                  <Text style={s.receiptVal}>{driverInfo.plate}</Text>
+                </View>
               </View>
             )}
 
             <View style={[s.receiptCard, { marginTop: 10 }]}>
-              <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Pickup:</Text> {pickup}</Text>
-              <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>To:</Text> {destination}</Text>
-              <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Total Cost:</Text> ₱{fare.toFixed(2)}</Text>
+              <Text style={s.receiptSectionTitle}>Trip Details</Text>
+              <View style={s.receiptRow}>
+                <Text style={s.receiptLabel}>Pickup:</Text>
+                <Text style={s.receiptVal} numberOfLines={2}>{pickup}</Text>
+              </View>
+              <View style={s.receiptRow}>
+                <Text style={s.receiptLabel}>To:</Text>
+                <Text style={s.receiptVal} numberOfLines={2}>{destination}</Text>
+              </View>
+              <View style={s.receiptRow}>
+                <Text style={s.receiptLabel}>Distance:</Text>
+                <Text style={s.receiptVal}>{distance} km</Text>
+              </View>
+              <View style={s.receiptRow}>
+                <Text style={s.receiptLabel}>Total Fare:</Text>
+                <Text style={[s.receiptVal, { color: '#22B04B', fontWeight: '900', fontSize: 16 }]}>₱{fare.toFixed(2)}</Text>
+              </View>
             </View>
+
+            {bookingStatus === STATUS.PENDING && (
+              <TouchableOpacity style={s.cancelBtn} onPress={handleCancelBooking}>
+                <Text style={s.cancelBtnText}>Cancel Booking</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Modal>
 
-      {/* ── Booking Success Overlay Modal ── */}
+      {/* ── Trip Complete Overlay ── */}
       <Modal visible={bookingSuccess} transparent animationType="fade">
         <View style={s.successOverlay}>
           <View style={s.successCard}>
             <View style={s.successIconBg}>
               <Ionicons name="checkmark-circle" size={54} color="#FFF" />
             </View>
-            <Text style={s.successTitle}>Booking Confirmed!</Text>
-            <Text style={s.successSubtitle}>Your trip has been completed successfully.</Text>
+            <Text style={s.successTitle}>Trip Complete! 🎉</Text>
+            <Text style={s.statusMsg}>Your ride has been completed successfully.</Text>
             <View style={s.receiptCard}>
-              <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Pickup:</Text> {pickup}</Text>
-              <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>To:</Text> {destination}</Text>
-              {driverInfo && <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Driver:</Text> {driverInfo.name}</Text>}
-              <Text style={s.receiptText}><Text style={{ fontWeight: '700' }}>Total Cost:</Text> ₱{fare.toFixed(2)}</Text>
+              <View style={s.receiptRow}>
+                <Text style={s.receiptLabel}>From:</Text>
+                <Text style={s.receiptVal} numberOfLines={2}>{pickup}</Text>
+              </View>
+              <View style={s.receiptRow}>
+                <Text style={s.receiptLabel}>To:</Text>
+                <Text style={s.receiptVal} numberOfLines={2}>{destination}</Text>
+              </View>
+              {driverInfo && (
+                <View style={s.receiptRow}>
+                  <Text style={s.receiptLabel}>Driver:</Text>
+                  <Text style={s.receiptVal}>{driverInfo.name}</Text>
+                </View>
+              )}
+              <View style={s.receiptRow}>
+                <Text style={s.receiptLabel}>Distance:</Text>
+                <Text style={s.receiptVal}>{distance} km</Text>
+              </View>
+              <View style={s.receiptRow}>
+                <Text style={s.receiptLabel}>Total Paid:</Text>
+                <Text style={[s.receiptVal, { color: '#22B04B', fontWeight: '900', fontSize: 17 }]}>₱{fare.toFixed(2)}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -499,81 +674,63 @@ export default function HomeScreen() {
 }
 
 const s = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#EAF1FB',
-  },
-  webMapContainer: {
-    flex: 1,
-    width: '100%',
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  webMapImage: {
-    width: '100%',
-    height: '100%',
-    opacity: 0.95,
-  },
-  webPinPosition: {
+  container:     { flex: 1, backgroundColor: '#EAF1FB' },
+  mapContainer:  { flex: 1, position: 'relative' },
+
+  // Map overlay buttons
+  pinBanner: {
     position: 'absolute',
-    alignSelf: 'center',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pulseWave: {
-    position: 'absolute',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(26, 79, 160, 0.4)',
-    backgroundColor: 'rgba(26, 79, 160, 0.08)',
-    transform: [{ scale: 1.1 }],
-  },
-  pinOuterCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(26, 79, 160, 0.25)',
-    borderWidth: 1.5,
-    borderColor: '#1A4FA0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pinInnerCircle: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    top: 16,
+    left: 16,
+    right: 16,
     backgroundColor: '#1A4FA0',
-    borderWidth: 1.5,
-    borderColor: '#FFF',
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 8,
+    elevation: 8,
+    zIndex: 10,
   },
+  pinBannerText:   { flex: 1, color: '#FFF', fontWeight: '700', fontSize: 14 },
+  pinBannerCancel: { padding: 2 },
+
+  mapPinButtons: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    gap: 8,
+    zIndex: 10,
+  },
+  mapPinBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    elevation: 4,
+  },
+  mapPinBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+
+  // Start button
   startButton: {
     position: 'absolute',
     bottom: 100,
     alignSelf: 'center',
     backgroundColor: '#1A4FA0',
     width: '80%',
-    height: 52,
-    borderRadius: 10,
+    height: 54,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    // @ts-ignore - web-only style
-    boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.2)',
-    cursor: 'pointer',
+    elevation: 8,
   },
-  startButtonText: {
-    color: '#FFF',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'flex-end',
-  },
+  startButtonText: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+
+  // Bottom sheet modal
+  modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   sheetContent: {
     backgroundColor: '#FFF',
     borderTopLeftRadius: 30,
@@ -582,199 +739,54 @@ const s = StyleSheet.create({
     paddingBottom: 40,
     paddingTop: 12,
   },
-  dragBar: {
-    width: 40,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#DDD',
-    alignSelf: 'center',
-    marginBottom: 15,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  sheetTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1A4FA0',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  inputContainer: {
-    marginBottom: 16,
-    position: 'relative',
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 10,
-    height: 48,
-    backgroundColor: '#FFF',
-    paddingHorizontal: 12,
-  },
-  inputIconBox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  textInput: {
-    flex: 1,
-    height: '100%',
-    fontSize: 15,
-    color: '#333',
-  },
-  connectorDots: {
-    marginLeft: 22,
-    marginVertical: 4,
-    gap: 3,
-  },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#A2C2E7',
-  },
-  estimateContainer: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1.5,
-    borderColor: '#EAF1FB',
-    marginBottom: 20,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  summaryItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  summaryLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  summaryValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1A4FA0',
-    marginTop: 2,
-  },
-  verticalDivider: {
-    width: 1.5,
-    height: 36,
-    backgroundColor: '#E2E8F0',
-  },
-  fareDisplay: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingTop: 12,
-  },
-  fareLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-  },
-  fareValue: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#22B04B',
-  },
-  bookButton: {
-    backgroundColor: '#1A4FA0',
-    borderRadius: 12,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bookButtonText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  successOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(26, 79, 160, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  successCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 30,
-    width: '90%',
-    alignItems: 'center',
-  },
-  successIconBg: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#22B04B',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1A4FA0',
-    marginBottom: 8,
-  },
-  successSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  receiptCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 16,
-    width: '100%',
-    borderWidth: 1.5,
-    borderColor: '#EAF1FB',
-    gap: 8,
-  },
-  receiptText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  suggestionsList: {
-    maxHeight: 150,
-    backgroundColor: '#FFF',
-    borderColor: '#E2E8F0',
-    borderWidth: 1.5,
-    borderRadius: 10,
-    marginTop: 4,
-    marginBottom: 8,
-    zIndex: 99,
-  },
-  suggestionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EAF1FB',
-  },
-  suggestionText: {
-    fontSize: 14,
-    color: '#333',
-    flex: 1,
-  },
+  dragBar:    { width: 40, height: 5, borderRadius: 2.5, backgroundColor: '#DDD', alignSelf: 'center', marginBottom: 15 },
+  sheetHeader:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  sheetTitle: { fontSize: 22, fontWeight: 'bold', color: '#1A4FA0' },
+  closeButton:{ padding: 4 },
+
+  // Inputs
+  inputContainer: { marginBottom: 16 },
+  inputWrapper:   { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 10, height: 48, backgroundColor: '#FFF', paddingHorizontal: 12, marginBottom: 4 },
+  inputIconBox:   { width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  textInput:      { flex: 1, height: '100%', fontSize: 15, color: '#333' },
+  pinIconButton:  { padding: 4 },
+  connectorDots:  { marginLeft: 22, marginVertical: 4, gap: 3 },
+  dot:            { width: 4, height: 4, borderRadius: 2, backgroundColor: '#A2C2E7' },
+
+  // Suggestions
+  suggestionsList: { maxHeight: 150, backgroundColor: '#FFF', borderColor: '#E2E8F0', borderWidth: 1.5, borderRadius: 10, marginBottom: 8 },
+  suggestionItem:  { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#EAF1FB' },
+  suggestionText:  { fontSize: 14, color: '#333', flex: 1 },
+
+  // Estimate
+  estimateContainer: { backgroundColor: '#F8FAFC', borderRadius: 12, padding: 16, borderWidth: 1.5, borderColor: '#EAF1FB', marginBottom: 20 },
+  summaryRow:     { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginBottom: 14 },
+  summaryItem:    { alignItems: 'center', flex: 1 },
+  summaryLabel:   { fontSize: 12, color: '#666', marginTop: 4 },
+  summaryValue:   { fontSize: 16, fontWeight: 'bold', color: '#1A4FA0', marginTop: 2 },
+  verticalDivider:{ width: 1.5, height: 36, backgroundColor: '#E2E8F0' },
+  fareDisplay:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E2E8F0', paddingTop: 12 },
+  fareLabel:      { fontSize: 15, fontWeight: '600', color: '#333' },
+  fareBreakdown:  { fontSize: 11, color: '#999', marginTop: 2 },
+  fareValue:      { fontSize: 22, fontWeight: '900', color: '#22B04B' },
+
+  // Book button
+  bookButton:     { backgroundColor: '#1A4FA0', borderRadius: 12, height: 54, justifyContent: 'center', alignItems: 'center' },
+  bookButtonText: { color: '#FFF', fontSize: 17, fontWeight: 'bold' },
+
+  // Status / success overlays
+  successOverlay: { flex: 1, backgroundColor: 'rgba(26,79,160,0.92)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  successCard:    { backgroundColor: '#FFF', borderRadius: 24, padding: 28, width: '100%', maxWidth: 380, alignItems: 'center' },
+  successIconBg:  { width: 84, height: 84, borderRadius: 42, backgroundColor: '#22B04B', justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
+  successTitle:   { fontSize: 22, fontWeight: 'bold', color: '#1A4FA0', marginBottom: 6, textAlign: 'center' },
+  statusMsg:      { fontSize: 14, color: '#555', textAlign: 'center', marginBottom: 16, lineHeight: 20 },
+
+  receiptCard:         { backgroundColor: '#F8FAFC', borderRadius: 12, padding: 14, width: '100%', borderWidth: 1.5, borderColor: '#EAF1FB', gap: 6 },
+  receiptSectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#1A4FA0', marginBottom: 4 },
+  receiptRow:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+  receiptLabel:        { fontSize: 13, color: '#888', fontWeight: '600', minWidth: 70 },
+  receiptVal:          { fontSize: 13, color: '#333', flex: 1, textAlign: 'right', fontWeight: '500' },
+
+  cancelBtn:     { marginTop: 16, borderWidth: 1.5, borderColor: '#D02A30', borderRadius: 10, paddingHorizontal: 28, paddingVertical: 10 },
+  cancelBtnText: { color: '#D02A30', fontWeight: '700', fontSize: 15 },
 });

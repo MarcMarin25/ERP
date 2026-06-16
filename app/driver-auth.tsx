@@ -292,11 +292,26 @@ export default function DriverAuthScreen() {
       const driver = await loginDriver(loginPhone, loginPw);
       await login({
         role: 'driver',
-        ...driver
+        id: driver.id,
+        username: driver.username,
+        name: driver.name,
+        birth_date: (driver as any).birth_date || '',
+        age: (driver as any).age || '',
+        phone: driver.phone,
+        email: driver.email,
+        address: driver.address || '',
+        region: (driver as any).region || '',
+        province: (driver as any).province || '',
+        city_barangay: (driver as any).city_barangay || '',
+        license_number: (driver as any).license_number || '',
+        license_expiry: (driver as any).license_expiry || '',
+        shift: (driver as any).shift || '',
+        created_at: (driver as any).created_at || '',
       });
+      await Swal.fire({ title: 'Welcome Back, Driver!', text: `Logged in as ${driver.name || driver.username}`, icon: 'success', confirmButtonText: 'Start Driving!' });
       router.replace('/(driver-tabs)/home');
     } catch (err: any) {
-      Swal.fire({ title: 'Login Failed', text: err.message || 'Login failed.', icon: 'error' });
+      Swal.fire({ title: 'Login Failed', text: err.message || 'Invalid phone or password. Please try again.', icon: 'error' });
     }
   };
 
@@ -304,7 +319,7 @@ export default function DriverAuthScreen() {
     if (!isStep1Valid || !isStep2Valid || !isStep3Valid || !isStep4Valid || !isStep5Valid) return;
     try {
       const fullAddress = `${form.city_barangay}, ${form.province}, ${form.region}`;
-      const driverData = {
+      const driverPayload = {
         username: form.username.trim(),
         name: form.name.trim() || form.username.trim(),
         birth_date: dobDate ? dobDate.toISOString().split('T')[0] : '',
@@ -320,18 +335,37 @@ export default function DriverAuthScreen() {
         license_expiry: expiryDate ? expiryDate.toISOString().split('T')[0] : '',
         shift: form.shift,
         password: form.password,
-        created_at: '', // Will be set by registerDriver()
+        created_at: '',
       };
 
-      await registerDriver(driverData);
+      // Register and get back the DB-assigned id
+      const registered = await registerDriver(driverPayload);
+
+      // Use the DB-returned id so login will work
       await login({
         role: 'driver',
-        ...driverData
+        id: registered.id,
+        username: registered.username || driverPayload.username,
+        name: registered.name || driverPayload.name,
+        birth_date: driverPayload.birth_date,
+        age: driverPayload.age,
+        phone: registered.phone || driverPayload.phone,
+        email: registered.email || driverPayload.email,
+        address: driverPayload.address,
+        region: driverPayload.region,
+        province: driverPayload.province,
+        city_barangay: driverPayload.city_barangay,
+        license_number: driverPayload.license_number,
+        license_issued: driverPayload.license_issued,
+        license_expiry: driverPayload.license_expiry,
+        shift: driverPayload.shift,
+        created_at: '',
       });
-      Swal.fire({ title: 'Success!', text: 'Registration successful! Welcome to DeviceGNS.', icon: 'success' });
+
+      await Swal.fire({ title: 'Registration Successful!', text: 'Welcome to DeviceGNS! Your driver account is ready.', icon: 'success', confirmButtonText: 'Start Driving!' });
       router.replace('/(driver-tabs)/home');
     } catch (err: any) {
-      Swal.fire({ title: 'Registration Failed', text: err.message || 'Registration failed.', icon: 'error' });
+      Swal.fire({ title: 'Registration Failed', text: err.message || 'Registration failed. Please check your details and try again.', icon: 'error' });
     }
   };
 

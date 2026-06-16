@@ -379,11 +379,25 @@ export default function PassengerAuthScreen() {
       const passenger = await loginPassenger(loginPhone, loginPw);
       await login({
         role: 'passenger',
-        ...passenger
+        id: passenger.id,
+        username: passenger.username,
+        name: passenger.name,
+        gender: (passenger as any).gender || 'Male',
+        birth_date: (passenger as any).birth_date || '',
+        age: (passenger as any).age || '',
+        phone: passenger.phone,
+        email: passenger.email,
+        address: passenger.address || '',
+        region: (passenger as any).region || '',
+        province: (passenger as any).province || '',
+        city: (passenger as any).city || '',
+        barangay: (passenger as any).barangay || '',
+        created_at: (passenger as any).created_at || '',
       });
+      await Swal.fire({ title: 'Welcome Back!', text: `Logged in as ${passenger.name || passenger.username}`, icon: 'success', confirmButtonText: 'Let\'s Go!' });
       router.replace('/(tabs)/home');
     } catch (err: any) {
-      Swal.fire({ title: 'Login Failed', text: err.message || 'Login failed.', icon: 'error' });
+      Swal.fire({ title: 'Login Failed', text: err.message || 'Invalid phone or password. Please try again.', icon: 'error' });
     }
   };
 
@@ -391,7 +405,7 @@ export default function PassengerAuthScreen() {
     if (!isStep1Valid || !isStep2Valid) return;
     try {
       const fullAddress = `${form.barangay}, ${form.city}, ${form.province}, ${form.region}`;
-      const passengerData = {
+      const passengerPayload = {
         username: form.username.trim(),
         name: form.name.trim() || form.username.trim(),
         gender: form.gender,
@@ -405,18 +419,35 @@ export default function PassengerAuthScreen() {
         barangay: form.barangay,
         address: fullAddress,
         password: form.password,
-        created_at: '', // Will be set by registerPassenger()
+        created_at: '',
       };
 
-      await registerPassenger(passengerData);
+      // Register and get back the DB-assigned id
+      const registered = await registerPassenger(passengerPayload);
+
+      // Use the DB-returned id so login will work
       await login({
         role: 'passenger',
-        ...passengerData
+        id: registered.id,
+        username: registered.username || passengerPayload.username,
+        name: registered.name || passengerPayload.name,
+        gender: passengerPayload.gender,
+        birth_date: passengerPayload.birth_date,
+        age: passengerPayload.age,
+        phone: registered.phone || passengerPayload.phone,
+        email: registered.email || passengerPayload.email,
+        address: passengerPayload.address,
+        region: passengerPayload.region,
+        province: passengerPayload.province,
+        city: passengerPayload.city,
+        barangay: passengerPayload.barangay,
+        created_at: '',
       });
-      Swal.fire({ title: 'Success!', text: 'Registration successful! Welcome to DeviceGNS.', icon: 'success' });
+
+      await Swal.fire({ title: 'Registration Successful!', text: 'Welcome to DeviceGNS! Your account is ready.', icon: 'success', confirmButtonText: 'Start Riding!' });
       router.replace('/(tabs)/home');
     } catch (err: any) {
-      Swal.fire({ title: 'Registration Failed', text: err.message || 'Registration failed.', icon: 'error' });
+      Swal.fire({ title: 'Registration Failed', text: err.message || 'Registration failed. Please check your details and try again.', icon: 'error' });
     }
   };
 

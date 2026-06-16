@@ -90,13 +90,43 @@ const BASE_URL = getBaseUrl();
 console.log('React Native API Base URL configured:', BASE_URL);
 
 async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
-  try {
-    const res = await fetch(url, init);
-    return res;
-  } catch (err: any) {
-    console.error('Network fetch error:', err);
-    throw new Error(`Failed to connect to the server.\n\nTarget URL: ${url}\n\nPlease check if your local API server is running on port 3000 and localtunnel forwarding is started.`);
+  const MAX_RETRIES = 3;
+  const TIMEOUT_MS = 12000;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const res = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          ...(init?.headers || {}),
+          'Bypass-Tunnel-Reminder': 'true',
+        },
+      });
+
+      clearTimeout(timeoutId);
+      return res;
+    } catch (err: any) {
+      console.warn(`[Attempt ${attempt}/${MAX_RETRIES}] Network error for ${url}:`, err.message);
+
+      if (attempt === MAX_RETRIES) {
+        console.error('All retry attempts exhausted for:', url);
+        throw new Error(
+          'Unable to connect to the server. Please check your internet connection and make sure the server is running.'
+        );
+      }
+
+      // Exponential backoff: 1s, 2s, 4s
+      const delay = Math.pow(2, attempt - 1) * 1000;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
   }
+
+  // Fallback (should never reach here)
+  throw new Error('Network request failed after retries.');
 }
 
 /**
@@ -401,6 +431,24 @@ export async function endBookingTrip(bookingId: number | string, fare: number): 
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.message || 'Failed to complete trip.');
+  }
+  return data;
+}
+
+/**
+ * Fetches all bookings history for a specific passenger from the database
+ */
+export async function fetchPassengerBookings(passengerId: number): Promise<any[]> {
+  const res = await safeFetch(`${BASE_URL}/api/bookings/passenger/${passengerId}`, {
+    method: 'GET',
+    headers: {
+      'Bypass-Tunnel-Reminder': 'true'
+    }
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to fetch passenger bookings.');
   }
   return data;
 }

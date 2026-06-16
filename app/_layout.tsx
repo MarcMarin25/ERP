@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { UserSession, getCurrentSession, setCurrentSession, clearCurrentSession, updateProfileInDb } from '../utils/mockDb';
+import { UserSession, getCurrentSession, setCurrentSession, clearCurrentSession, updateProfileInDb, fetchPassengerBookings } from '../utils/mockDb';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { FontAwesome, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -133,10 +133,31 @@ export default function RootLayout() {
               address: session.address,
               created_at: session.created_at || '',
             });
+            if (session.id) {
+              const dbBookings = await fetchPassengerBookings(session.id);
+              const formattedTrips = dbBookings.map((b: any) => {
+                const dateObj = new Date(b.created_at);
+                const pickupName = b.route_path ? b.route_path.split(' -> ')[0] : 'Pickup';
+                const destName = b.route_path ? b.route_path.split(' -> ')[1] : 'Destination';
+                return {
+                  id: String(b.id),
+                  date: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                  time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                  pickup: pickupName,
+                  destination: destName,
+                  price: b.fare ? parseFloat(b.fare) : Math.round(40 + (parseFloat(b.distance_km || '0') * 15)),
+                  status: b.status_id === 9 ? ('Cancelled' as const) : ('Completed' as const),
+                  driverName: b.driver_name || undefined,
+                  distance: b.distance_km ? `${b.distance_km} km` : '0 km',
+                  duration: 'N/A'
+                };
+              });
+              setTrips(formattedTrips);
+            }
           }
         }
       } catch (error) {
-        console.error('Failed to load session:', error);
+        console.error('Failed to load session/bookings:', error);
       } finally {
         setIsLoading(false);
       }
@@ -159,6 +180,31 @@ export default function RootLayout() {
         address: session.address,
         created_at: session.created_at || '',
       });
+      if (session.id) {
+        try {
+          const dbBookings = await fetchPassengerBookings(session.id);
+          const formattedTrips = dbBookings.map((b: any) => {
+            const dateObj = new Date(b.created_at);
+            const pickupName = b.route_path ? b.route_path.split(' -> ')[0] : 'Pickup';
+            const destName = b.route_path ? b.route_path.split(' -> ')[1] : 'Destination';
+            return {
+              id: String(b.id),
+              date: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+              time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+              pickup: pickupName,
+              destination: destName,
+              price: b.fare ? parseFloat(b.fare) : Math.round(40 + (parseFloat(b.distance_km || '0') * 15)),
+              status: b.status_id === 9 ? ('Cancelled' as const) : ('Completed' as const),
+              driverName: b.driver_name || undefined,
+              distance: b.distance_km ? `${b.distance_km} km` : '0 km',
+              duration: 'N/A'
+            };
+          });
+          setTrips(formattedTrips);
+        } catch (error) {
+          console.error('Failed to load passenger bookings on login:', error);
+        }
+      }
     }
   };
 

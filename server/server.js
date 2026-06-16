@@ -35,6 +35,22 @@ async function initDb() {
       )
     `;
     await conn.query(createTableSql);
+
+    const createBookingsTableSql = `
+      CREATE TABLE IF NOT EXISTS bookings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        passenger_id bigint(20) unsigned NULL,
+        pickup_location VARCHAR(255) NOT NULL,
+        destination_location VARCHAR(255) NOT NULL,
+        distance_km DECIMAL(10, 2) NOT NULL,
+        duration_min INT NOT NULL,
+        fare DECIMAL(10, 2) NOT NULL,
+        status VARCHAR(50) DEFAULT 'Completed',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await conn.query(createBookingsTableSql);
+
     console.log('Database tables verified/created successfully.');
     conn.release();
   } catch (err) {
@@ -338,26 +354,56 @@ app.post('/api/bookings', async (req, res) => {
     return res.status(400).json({ message: 'Missing required booking fields (passenger_id, start_lat, start_lng).' });
   }
 
+  const conn = await pool.getConnection();
   try {
+    await conn.beginTransaction();
+
     const routePath = `${pickup_name || 'Pickup'} -> ${destination_name || 'Destination'}`;
-    const sql = `
+    
+    // A. Insert into routes table (for driver matching flow)
+    const routeSql = `
       INSERT INTO routes (status_id, passenger_id, start_lat, start_lng, end_lat, end_lng, distance_km, route_path, created_at, updated_at)
       VALUES (6, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `;
-    const [result] = await pool.query(sql, [passenger_id, start_lat, start_lng, end_lat || null, end_lng || null, distance_km || null, routePath]);
-    
-    // Log action
-    await pool.query(
+    const [routeResult] = await conn.query(routeSql, [
+      passenger_id, start_lat, start_lng,
+      end_lat || null, end_lng || null,
+      distance_km || null, routePath
+    ]);
+    const routeId = routeResult.insertId;
+
+    // B. Also insert into bookings table (clear record for phpMyAdmin visibility)
+    const durationMin = Math.round((distance_km || 0) * 2.5 + 3);
+    const bookingSql = `
+      INSERT INTO bookings (passenger_id, pickup_location, destination_location, distance_km, duration_min, fare, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'Pending', NOW())
+    `;
+    await conn.query(bookingSql, [
+      passenger_id,
+      pickup_name || 'Pickup',
+      destination_name || 'Destination',
+      parseFloat(distance_km || 0).toFixed(2),
+      durationMin,
+      parseFloat(fare || 0).toFixed(2)
+    ]);
+
+    // C. Log to action_history
+    await conn.query(
       `INSERT INTO action_history (user_id, role, action, details, created_at) VALUES (?, 'passenger', 'Create Booking', ?, NOW())`,
-      [passenger_id, `Created booking route ID ${result.insertId} from ${pickup_name} to ${destination_name} (Fare: PHP ${fare})`]
+      [passenger_id, `Booking route #${routeId}: ${pickup_name} → ${destination_name} | ${distance_km} km | ₱${fare}`]
     );
 
-    res.status(201).json({ bookingId: result.insertId, status_id: 6, message: 'Booking created successfully!' });
+    await conn.commit();
+    res.status(201).json({ bookingId: routeId, status_id: 6, message: 'Booking created successfully!' });
   } catch (err) {
+    await conn.rollback();
     console.error('Error creating booking:', err);
     res.status(500).json({ message: 'Failed to create booking.', error: err.message });
+  } finally {
+    conn.release();
   }
 });
+
 
 // 2. Fetch Pending/Unassigned Bookings (Driver)
 app.get('/api/bookings/pending', async (req, res) => {
@@ -374,6 +420,31 @@ app.get('/api/bookings/pending', async (req, res) => {
   } catch (err) {
     console.error('Error fetching pending bookings:', err);
     res.status(500).json({ message: 'Failed to fetch pending bookings.', error: err.message });
+  }
+});
+
+// Fetch passenger bookings history
+app.get('/api/bookings/passenger/:passenger_id', async (req, res) => {
+  const { passenger_id } = req.params;
+
+  try {
+    const sql = `
+      SELECT r.id, r.status_id, r.start_lat, r.start_lng, r.end_lat, r.end_lng, r.distance_km, r.route_path, r.created_at,
+             s.name as status_name,
+             u.name as driver_name,
+             rev.amount as fare
+      FROM routes r
+      LEFT JOIN statuses s ON r.status_id = s.id
+      LEFT JOIN users u ON r.driver_id = u.id
+      LEFT JOIN revenues rev ON r.revenue_id = rev.id
+      WHERE r.passenger_id = ?
+      ORDER BY r.id DESC
+    `;
+    const [rows] = await pool.query(sql, [passenger_id]);
+    res.json(rows);
+  } catch (err) {
+    console.error('Fetch passenger bookings error:', err);
+    res.status(500).json({ message: 'Failed to fetch passenger bookings.', error: err.message });
   }
 });
 
@@ -568,7 +639,13 @@ app.post('/api/bookings/:id/end', async (req, res) => {
     `;
     await conn.query(routeUpdateSql, [revenueId, id]);
 
-    // D. Log Action
+    // D. Update bookings table status to Completed
+    await conn.query(
+      `UPDATE bookings SET status = 'Completed', fare = ? WHERE passenger_id = ? AND status = 'Pending' ORDER BY created_at DESC LIMIT 1`,
+      [fare, driverId]
+    ).catch(() => {}); // Non-fatal if bookings table update fails
+
+    // E. Log Action
     await conn.query(
       `INSERT INTO action_history (user_id, role, action, details, created_at) VALUES (?, 'driver', 'Complete Trip', ?, NOW())`,
       [driverId, `Completed trip route ID ${id}. Revenue ID ${revenueId} created. Fare: PHP ${fare}`]

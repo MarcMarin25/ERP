@@ -14,6 +14,7 @@ export interface GoogleMapProps {
   driverLocation?: LatLng | null;
   interactive?: boolean;
   style?: any;
+  onMapPress?: (coords: LatLng) => void;
 }
 
 const DEFAULT_REGION = {
@@ -30,6 +31,7 @@ export default function GoogleMap({
   driverLocation,
   interactive = true,
   style,
+  onMapPress,
 }: GoogleMapProps) {
   const mapRef = useRef<MapView>(null);
 
@@ -95,6 +97,11 @@ export default function GoogleMap({
       zoomEnabled={interactive}
       rotateEnabled={interactive}
       pitchEnabled={interactive}
+      onPress={(e) => {
+        if (onMapPress) {
+          onMapPress(e.nativeEvent.coordinate);
+        }
+      }}
     >
       {/* Pickup Marker */}
       {pickup && (

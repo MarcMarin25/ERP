@@ -13,6 +13,7 @@ export interface GoogleMapProps {
   driverLocation?: LatLng | null;
   interactive?: boolean;
   style?: any;
+  onMapPress?: (coords: LatLng) => void;
 }
 
 let mapsLoadingPromise: Promise<void> | null = null;
@@ -51,6 +52,7 @@ export default function GoogleMap({
   driverLocation,
   interactive = true,
   style,
+  onMapPress,
 }: GoogleMapProps) {
   const containerRef = useRef<View>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -61,6 +63,11 @@ export default function GoogleMap({
   const destinationMarkerRef = useRef<any>(null);
   const driverMarkerRef = useRef<any>(null);
   const polylineRef = useRef<any>(null);
+
+  const onMapPressRef = useRef(onMapPress);
+  useEffect(() => {
+    onMapPressRef.current = onMapPress;
+  }, [onMapPress]);
 
   const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBFHqGzZOVs7b0cCdWuePt0t4kbsPiJ7Kc";
 
@@ -132,6 +139,17 @@ export default function GoogleMap({
     });
 
     mapInstanceRef.current = map;
+
+    if (interactive) {
+      map.addListener('click', (e: any) => {
+        if (e.latLng && onMapPressRef.current) {
+          onMapPressRef.current({
+            latitude: e.latLng.lat(),
+            longitude: e.latLng.lng()
+          });
+        }
+      });
+    }
 
     return () => {
       // Cleanup markers
@@ -297,7 +315,14 @@ export default function GoogleMap({
       <div
         // @ts-ignore
         ref={containerRef}
-        style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}
+        style={{
+          width: '100%',
+          height: '100%',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          cursor: onMapPress ? 'crosshair' : 'grab',
+        }}
       />
     </View>
   );
