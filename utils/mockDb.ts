@@ -69,11 +69,11 @@ export interface UserSession {
 // Automatically detect the PC host IP for Metro/Expo bundling environment,
 // so it connects cleanly across Android emulators, iOS simulators, and physical phones on local Wi-Fi.
 const getBaseUrl = () => {
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
-  }
   if (Platform.OS === 'web') {
     return 'http://localhost:3000';
+  }
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
   }
   const hostUri = Constants.expoConfig?.hostUri;
   if (hostUri) {
@@ -89,11 +89,21 @@ const getBaseUrl = () => {
 const BASE_URL = getBaseUrl();
 console.log('React Native API Base URL configured:', BASE_URL);
 
+async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    const res = await fetch(url, init);
+    return res;
+  } catch (err: any) {
+    console.error('Network fetch error:', err);
+    throw new Error(`Failed to connect to the server.\n\nTarget URL: ${url}\n\nPlease check if your local API server is running on port 3000 and localtunnel forwarding is started.`);
+  }
+}
+
 /**
  * Register a new passenger to the live MySQL database via backend
  */
 export async function registerPassenger(passenger: Passenger): Promise<Passenger> {
-  const res = await fetch(`${BASE_URL}/api/passengers/register`, {
+  const res = await safeFetch(`${BASE_URL}/api/passengers/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -113,7 +123,7 @@ export async function registerPassenger(passenger: Passenger): Promise<Passenger
  * Register a new driver to the live MySQL database via backend
  */
 export async function registerDriver(driver: Driver): Promise<Driver> {
-  const res = await fetch(`${BASE_URL}/api/drivers/register`, {
+  const res = await safeFetch(`${BASE_URL}/api/drivers/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -133,7 +143,7 @@ export async function registerDriver(driver: Driver): Promise<Driver> {
  * Authenticate passenger by phone and password in MySQL
  */
 export async function loginPassenger(phone: string, password: string): Promise<Passenger> {
-  const res = await fetch(`${BASE_URL}/api/passengers/login`, {
+  const res = await safeFetch(`${BASE_URL}/api/passengers/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -153,7 +163,7 @@ export async function loginPassenger(phone: string, password: string): Promise<P
  * Authenticate driver by phone and password in MySQL
  */
 export async function loginDriver(phone: string, password: string): Promise<Driver> {
-  const res = await fetch(`${BASE_URL}/api/drivers/login`, {
+  const res = await safeFetch(`${BASE_URL}/api/drivers/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -173,7 +183,7 @@ export async function loginDriver(phone: string, password: string): Promise<Driv
  * Update user profile details in the live MySQL database
  */
 export async function updateProfileInDb(session: UserSession): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/session/update`, {
+  const res = await safeFetch(`${BASE_URL}/api/session/update`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -185,6 +195,35 @@ export async function updateProfileInDb(session: UserSession): Promise<void> {
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.message || 'Failed to save profile changes to the database.');
+  }
+}
+
+/**
+ * Log user action history directly to the phpMyAdmin database
+ */
+export async function logActionToDb(action: string, details?: string): Promise<void> {
+  try {
+    const session = await getCurrentSession();
+    const body: any = {
+      action,
+      details,
+    };
+    if (session) {
+      body.user_id = session.id;
+      body.role = session.role;
+      body.username = session.username;
+    }
+    
+    await safeFetch(`${BASE_URL}/api/actions/log`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Bypass-Tunnel-Reminder': 'true'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch (error) {
+    console.error('Failed to log action to DB:', error);
   }
 }
 

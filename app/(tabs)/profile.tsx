@@ -16,6 +16,8 @@ import { FontAwesome, Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { usePassengerData, useAuth } from '../_layout';
+import { Swal } from '../../components/Swal';
+import { logActionToDb } from '../../utils/mockDb';
 
 function calcAge(dob: Date): number {
   const today = new Date();
@@ -93,29 +95,29 @@ export default function ProfileScreen() {
   const handleUpdate = async () => {
     if (activeTab === 'Basic') {
       if (!editForm.username.trim() || !editForm.phone.trim() || !editForm.email.trim()) {
-        alert('Please fill out all required fields.');
+        Swal.fire({ title: 'Fields Required', text: 'Please fill out all required fields.', icon: 'warning' });
         return;
       }
       try {
         // Save basic info changes
         setProfile(editForm);
         await updateSessionProfile(editForm);
-        alert('Profile updated successfully!');
+        Swal.fire({ title: 'Success!', text: 'Profile updated successfully!', icon: 'success' });
         setIsEditing(false);
       } catch (err: any) {
-        alert(err.message || 'Failed to update profile.');
+        Swal.fire({ title: 'Update Failed', text: err.message || 'Failed to update profile.', icon: 'error' });
       }
     } else {
       // Save password change
       if (!passwordForm.current || !passwordForm.new || !passwordForm.confirm) {
-        alert('Please complete all password fields.');
+        Swal.fire({ title: 'Fields Required', text: 'Please complete all password fields.', icon: 'warning' });
         return;
       }
       if (passwordForm.new !== passwordForm.confirm) {
-        alert('New passwords do not match.');
+        Swal.fire({ title: 'Validation Error', text: 'New passwords do not match.', icon: 'error' });
         return;
       }
-      alert('Password updated successfully!');
+      Swal.fire({ title: 'Success!', text: 'Password updated successfully!', icon: 'success' });
       setIsEditing(false);
     }
   };
@@ -128,7 +130,8 @@ export default function ProfileScreen() {
     // Clear session details / go back to welcome screen
     try {
       await logout();
-      alert('Logged out successfully.');
+      logActionToDb('Logout', 'Passenger logged out successfully');
+      Swal.fire({ title: 'Logged Out', text: 'Logged out successfully.', icon: 'success' });
       router.replace('/welcome');
     } catch (err) {
       console.error('Logout failed:', err);

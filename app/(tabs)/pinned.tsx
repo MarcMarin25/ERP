@@ -14,19 +14,29 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { usePassengerData } from '../_layout';
+import { logActionToDb } from '../../utils/mockDb';
 
 export default function PinnedScreen() {
   const { trips, setTrips } = usePassengerData();
   const [searchText, setSearchText] = useState('');
 
   const toggleFavorite = (tripId: string) => {
+    let tripDetails = '';
+    let willBeFavorite = false;
+
     setTrips(prev => prev.map(t => {
       if (t.id === tripId) {
         const isFav = !t.isFavorite;
+        willBeFavorite = isFav;
+        tripDetails = `Trip ID: ${t.id}, pickup: ${t.pickup}, destination: ${t.destination}`;
         return { ...t, isFavorite: isFav };
       }
       return t;
     }));
+
+    // Log action to phpMyAdmin database
+    const actionName = willBeFavorite ? 'Add to Favorites' : 'Remove Favorite';
+    logActionToDb(actionName, tripDetails);
   };
 
   // Filter trips by favorite status and search text

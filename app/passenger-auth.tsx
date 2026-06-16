@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import RippleButton from '../components/RippleButton';
 import { useAuth } from './_layout';
 import { registerPassenger, loginPassenger } from '../utils/mockDb';
+import { Swal } from '../components/Swal';
 
 // ─── PH regions data ──────────────────────────────────────────────────────────
 const REGIONS = [
@@ -382,7 +383,7 @@ export default function PassengerAuthScreen() {
       });
       router.replace('/(tabs)/home');
     } catch (err: any) {
-      alert(err.message || 'Login failed.');
+      Swal.fire({ title: 'Login Failed', text: err.message || 'Login failed.', icon: 'error' });
     }
   };
 
@@ -412,10 +413,10 @@ export default function PassengerAuthScreen() {
         role: 'passenger',
         ...passengerData
       });
-      alert('Registration successful! Welcome to DeviceGNS.');
+      Swal.fire({ title: 'Success!', text: 'Registration successful! Welcome to DeviceGNS.', icon: 'success' });
       router.replace('/(tabs)/home');
     } catch (err: any) {
-      alert(err.message || 'Registration failed.');
+      Swal.fire({ title: 'Registration Failed', text: err.message || 'Registration failed.', icon: 'error' });
     }
   };
 

@@ -20,6 +20,8 @@ import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { usePassengerData } from '../_layout';
 import GoogleMap from '../../components/GoogleMap';
 import { getSuggestions, geocode, getDirections, PlaceSuggestion } from '../../utils/googleMapsService';
+import { Swal } from '../../components/Swal';
+import { logActionToDb } from '../../utils/mockDb';
 
 export default function HomeScreen() {
   const { setTrips } = usePassengerData();
@@ -139,7 +141,7 @@ export default function HomeScreen() {
 
   const handleBookRide = () => {
     if (!destination.trim()) {
-      alert('Please enter a destination location.');
+      Swal.fire({ title: 'Destination Required', text: 'Please enter a destination location.', icon: 'warning' });
       return;
     }
 
@@ -160,6 +162,9 @@ export default function HomeScreen() {
       };
 
       setTrips(prev => [newTrip, ...prev]);
+
+      // Log book ride action to phpMyAdmin database
+      logActionToDb('Book Ride', `Booked ride from ${pickup} to ${destination}. Fare: ₱${fare.toFixed(2)}`);
 
       setTimeout(() => {
         setBookingSuccess(false);

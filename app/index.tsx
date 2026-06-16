@@ -21,21 +21,11 @@ export default function SplashScreen() {
   useEffect(() => {
     if (!isLoading) {
       const timer = setTimeout(() => {
-        if (userSession) {
-          if (userSession.role === 'passenger') {
-            router.replace('/(tabs)/home');
-          } else if (userSession.role === 'driver') {
-            router.replace('/(driver-tabs)/home');
-          } else {
-            router.replace('/welcome');
-          }
-        } else {
-          router.replace('/welcome');
-        }
+        router.replace('/welcome');
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [isLoading, userSession, router]);
+  }, [isLoading, router]);
 
   return (
     <View style={s.container}>

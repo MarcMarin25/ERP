@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import RippleButton from '../components/RippleButton';
 import { useAuth } from './_layout';
 import { registerDriver, loginDriver } from '../utils/mockDb';
+import { Swal } from '../components/Swal';
 
 // ─── PH regions data (shared) ─────────────────────────────────────────────────
 const REGIONS = [
@@ -295,7 +296,7 @@ export default function DriverAuthScreen() {
       });
       router.replace('/(driver-tabs)/home');
     } catch (err: any) {
-      alert(err.message || 'Login failed.');
+      Swal.fire({ title: 'Login Failed', text: err.message || 'Login failed.', icon: 'error' });
     }
   };
 
@@ -327,10 +328,10 @@ export default function DriverAuthScreen() {
         role: 'driver',
         ...driverData
       });
-      alert('Registration successful! Welcome to DeviceGNS.');
+      Swal.fire({ title: 'Success!', text: 'Registration successful! Welcome to DeviceGNS.', icon: 'success' });
       router.replace('/(driver-tabs)/home');
     } catch (err: any) {
-      alert(err.message || 'Registration failed.');
+      Swal.fire({ title: 'Registration Failed', text: err.message || 'Registration failed.', icon: 'error' });
     }
   };
 

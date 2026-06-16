@@ -6,6 +6,7 @@ import { useFonts } from 'expo-font';
 import { FontAwesome, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { SwalContainer } from '../components/Swal';
 
 // Prevent the splash screen from auto-hiding so we can preload assets
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -239,6 +240,7 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="(driver-tabs)" />
           </Stack>
+          <SwalContainer />
         </PassengerDataContext.Provider>
       </AuthContext.Provider>
     </SafeAreaProvider>

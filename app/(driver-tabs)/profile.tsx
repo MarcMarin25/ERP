@@ -4,6 +4,8 @@ import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { TabHeader } from './home';
 import { useAuth } from '../_layout';
+import { Swal } from '../../components/Swal';
+import { logActionToDb } from '../../utils/mockDb';
 
 export default function DriverProfileScreen() {
   const router = useRouter();
@@ -15,7 +17,8 @@ export default function DriverProfileScreen() {
     setLogoutModalVisible(false);
     try {
       await logout();
-      alert('Logged out successfully.');
+      logActionToDb('Logout', 'Driver logged out successfully');
+      Swal.fire({ title: 'Logged Out', text: 'Logged out successfully.', icon: 'success' });
       router.replace('/welcome');
     } catch (err) {
       console.error('Logout failed:', err);

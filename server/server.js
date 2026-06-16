@@ -19,6 +19,30 @@ const pool = mysql.createPool({
   queueLimit: 0
 });
 
+// Initialize database tables
+async function initDb() {
+  try {
+    const conn = await pool.getConnection();
+    const createTableSql = `
+      CREATE TABLE IF NOT EXISTS action_history (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id bigint(20) unsigned NULL,
+        role VARCHAR(50) NULL,
+        username VARCHAR(255) NULL,
+        action VARCHAR(100) NOT NULL,
+        details TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await conn.query(createTableSql);
+    console.log('Database tables verified/created successfully.');
+    conn.release();
+  } catch (err) {
+    console.error('Failed to initialize database tables:', err.message);
+  }
+}
+initDb();
+
 // Middleware to log requests
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
@@ -68,6 +92,13 @@ app.post('/api/passengers/register', async (req, res) => {
     `;
     await conn.query(passengerSql, [userId, birth_date]);
 
+    // Log passenger registration action
+    const logSql = `
+      INSERT INTO action_history (user_id, role, username, action, details, created_at)
+      VALUES (?, 'passenger', ?, 'Register', 'Passenger registered successfully', NOW())
+    `;
+    await conn.query(logSql, [userId, username]);
+
     await conn.commit();
     res.status(201).json({ id: userId, username, name, phone, email, message: 'Passenger registered successfully!' });
   } catch (err) {
@@ -98,6 +129,13 @@ app.post('/api/passengers/login', async (req, res) => {
     if (rows.length === 0) {
       return res.status(401).json({ message: 'Invalid phone number or password.' });
     }
+
+    // Log passenger login action
+    const logSql = `
+      INSERT INTO action_history (user_id, role, username, action, details, created_at)
+      VALUES (?, 'passenger', ?, 'Login', 'Passenger logged in successfully', NOW())
+    `;
+    await pool.query(logSql, [rows[0].id, rows[0].username]);
 
     res.json(rows[0]);
   } catch (err) {
@@ -147,6 +185,13 @@ app.post('/api/drivers/register', async (req, res) => {
     `;
     await conn.query(driverSql, [userId, license_number, license_expiry, shift]);
 
+    // Log driver registration action
+    const logSql = `
+      INSERT INTO action_history (user_id, role, username, action, details, created_at)
+      VALUES (?, 'driver', ?, 'Register', 'Driver registered successfully', NOW())
+    `;
+    await conn.query(logSql, [userId, username]);
+
     await conn.commit();
     res.status(201).json({ id: userId, username, name, phone, email, message: 'Driver registered successfully!' });
   } catch (err) {
@@ -178,6 +223,13 @@ app.post('/api/drivers/login', async (req, res) => {
     if (rows.length === 0) {
       return res.status(401).json({ message: 'Invalid phone number or password.' });
     }
+
+    // Log driver login action
+    const logSql = `
+      INSERT INTO action_history (user_id, role, username, action, details, created_at)
+      VALUES (?, 'driver', ?, 'Login', 'Driver logged in successfully', NOW())
+    `;
+    await pool.query(logSql, [rows[0].id, rows[0].username]);
 
     res.json(rows[0]);
   } catch (err) {
@@ -235,6 +287,15 @@ app.post('/api/session/update', async (req, res) => {
       await conn.query(driverSql, [license_number, license_expiry, shift, id]);
     }
 
+    // Log profile update action
+    const logSql = `
+      INSERT INTO action_history (user_id, role, username, action, details, created_at)
+      VALUES (?, ?, ?, 'Update Profile', ?, NOW())
+    `;
+    const [userRow] = await conn.query('SELECT username FROM users WHERE id = ?', [id]);
+    const uName = userRow[0] ? userRow[0].username : '';
+    await conn.query(logSql, [id, role, uName, `Profile details updated for role: ${role}`]);
+
     await conn.commit();
     res.json({ message: 'Profile updated successfully!' });
   } catch (err) {
@@ -243,6 +304,27 @@ app.post('/api/session/update', async (req, res) => {
     res.status(500).json({ message: 'Failed to update profile.', error: err.message });
   } finally {
     conn.release();
+  }
+});
+
+// Log Action Endpoint
+app.post('/api/actions/log', async (req, res) => {
+  const { user_id, role, username, action, details } = req.body;
+
+  if (!action) {
+    return res.status(400).json({ message: 'Action name is required.' });
+  }
+
+  try {
+    const sql = `
+      INSERT INTO action_history (user_id, role, username, action, details, created_at)
+      VALUES (?, ?, ?, ?, ?, NOW())
+    `;
+    await pool.query(sql, [user_id || null, role || null, username || null, action, details || null]);
+    res.status(201).json({ message: 'Action logged successfully!' });
+  } catch (err) {
+    console.error('Action logging error:', err);
+    res.status(500).json({ message: 'Failed to log action.', error: err.message });
   }
 });
 
